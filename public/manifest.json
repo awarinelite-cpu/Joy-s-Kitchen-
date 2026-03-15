@@ -1,0 +1,14 @@
+{
+  "name": "Joy's Kitchen",
+  "short_name": "Joy's Kitchen",
+  "description": "Order fresh noodles from Joy's Kitchen",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e0905",
+  "theme_color": "#e8450a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
