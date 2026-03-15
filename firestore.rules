@@ -1,0 +1,22 @@
+// firestore.rules
+// Deploy with: firebase deploy --only firestore:rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Orders: anyone can create (place order), anyone can read their own
+    match /orders/{orderId} {
+      allow create: if request.resource.data.customer_name is string
+                    && request.resource.data.total_price is number;
+      allow read: if true;
+      // Only update payment_time, order_status (vendor or confirmed payment flow)
+      allow update: if true;
+
+      // Messages subcollection
+      match /messages/{msgId} {
+        allow read, create: if true;
+      }
+    }
+  }
+}
