@@ -783,11 +783,8 @@ function CustomizePage({ nav, noodleId, toast }) {
           {liveAddons.map((a) => (
             <div key={a.id} className={`addons-item ${addons.includes(a.id) ? "sel" : ""}`} onClick={() => toggleAddon(a.id)}>
               <span style={{ fontSize: 14, fontWeight: 600 }}>{a.label}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ color: "var(--fire)", fontWeight: 700, fontSize: 13 }}>+{fmt(a.price)}</span>
-                <div style={{ width: 20, height: 20, borderRadius: 6, background: addons.includes(a.id) ? "var(--fire)" : "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#fff" }}>
-                  {addons.includes(a.id) ? "✓" : ""}
-                </div>
+              <div style={{ width: 22, height: 22, borderRadius: 6, background: addons.includes(a.id) ? "var(--fire)" : "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", flexShrink: 0 }}>
+                {addons.includes(a.id) ? "✓" : ""}
               </div>
             </div>
           ))}
@@ -1483,8 +1480,8 @@ function VendorPricesPage({ nav, toast }) {
   const [editMenu, setEditMenu] = useState(null);
   const [editAddons, setEditAddons] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("menu"); // "menu" | "addons"
 
-  // Init local editable copies
   useEffect(() => { if (menu && !editMenu) setEditMenu(menu.map(i => ({ ...i }))); }, [menu]);
   useEffect(() => { if (addons && !editAddons) setEditAddons(addons.map(i => ({ ...i }))); }, [addons]);
 
@@ -1493,7 +1490,7 @@ function VendorPricesPage({ nav, toast }) {
     try {
       await saveMenuItems(editMenu);
       await saveAddonItems(editAddons);
-      toast("Prices saved! ✅", "💰");
+      toast("Saved successfully ✅", "💰");
     } catch {
       toast("Failed to save. Try again.", "❌");
     }
@@ -1502,125 +1499,118 @@ function VendorPricesPage({ nav, toast }) {
 
   const updateMenuPrice = (id, val) =>
     setEditMenu(p => p.map(i => i.id === id ? { ...i, price: Number(val) || 0 } : i));
-
   const updateMenuName = (id, val) =>
     setEditMenu(p => p.map(i => i.id === id ? { ...i, name: val } : i));
-
   const updateAddonPrice = (id, val) =>
     setEditAddons(p => p.map(i => i.id === id ? { ...i, price: Number(val) || 0 } : i));
-
   const updateAddonName = (id, val) =>
     setEditAddons(p => p.map(i => i.id === id ? { ...i, label: val } : i));
 
-  const inputStyle = {
-    width: 110, padding: "8px 10px", borderRadius: 8, fontSize: 14, fontWeight: 700,
-    border: "2px solid var(--border)", color: "var(--fire)", fontFamily: "var(--font-h)",
-    textAlign: "right", outline: "none",
+  const nameInputStyle = {
+    flex: 1, padding: "10px 12px", borderRadius: 9, fontSize: 14,
+    fontWeight: 600, border: "2px solid var(--border)", color: "var(--ink)",
+    fontFamily: "var(--font-b)", outline: "none", background: "#fff",
   };
+  const priceInputStyle = {
+    width: 100, padding: "10px 10px", borderRadius: 9, fontSize: 15,
+    fontWeight: 800, border: "2px solid var(--border)", color: "var(--fire)",
+    fontFamily: "var(--font-h)", textAlign: "right", outline: "none", background: "#fff",
+  };
+
+  // Column headers
+  const ColHeader = () => (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10, marginBottom: 10, padding: "0 2px" }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Item Name</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "right" }}>Price (₦)</span>
+    </div>
+  );
 
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
       <div className="topbar">
         <div className="topbar-inner" style={{ maxWidth: 900 }}>
-          <div><h1>Edit Menu</h1><div className="sub">Tap any name or price to edit</div></div>
+          <div><h1>Edit Menu</h1><div className="sub">Change names and prices</div></div>
           <button className="btn btn-fire btn-sm" onClick={saveAll} disabled={saving} style={{ marginLeft: "auto" }}>
-            {saving ? "Saving…" : "Save All ✓"}
+            {saving ? "Saving…" : "💾 Save All"}
           </button>
         </div>
       </div>
 
       <div className="wrap-wide" style={{ paddingTop: 20 }}>
 
-        {/* Menu Items */}
-        <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>
-            🍜 Menu Items
-          </p>
-          {(editMenu || menu).map((item) => {
-            const current = (editMenu || menu).find(i => i.id === item.id) || item;
-            return (
-              <div key={item.id} style={{ padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
-                {/* Name row */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", minWidth: 42 }}>Name</span>
+        {/* Tab switcher */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 20, background: "var(--warm)", borderRadius: 12, padding: 4 }}>
+          {[["menu", "🍜 Noodles"], ["addons", "🌶️ Add-ons"]].map(([id, label]) => (
+            <button key={id} onClick={() => setActiveTab(id)} style={{
+              flex: 1, padding: "11px 0", borderRadius: 10, border: "none", cursor: "pointer",
+              background: activeTab === id ? "#fff" : "transparent",
+              color: activeTab === id ? "var(--fire)" : "var(--muted)",
+              fontWeight: 700, fontSize: 13, fontFamily: "var(--font-b)",
+              boxShadow: activeTab === id ? "0 1px 6px rgba(0,0,0,0.08)" : "none",
+              transition: "all 0.15s",
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {/* Noodles tab */}
+        {activeTab === "menu" && (
+          <div className="card" style={{ padding: "20px 16px", marginBottom: 20 }}>
+            <ColHeader />
+            {(editMenu || menu).map((item) => {
+              const cur = (editMenu || menu).find(i => i.id === item.id) || item;
+              return (
+                <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10, marginBottom: 10, alignItems: "center" }}>
                   <input
-                    style={{
-                      flex: 1, padding: "8px 12px", borderRadius: 8, fontSize: 14,
-                      fontWeight: 700, border: "2px solid var(--border)", color: "var(--ink)",
-                      fontFamily: "var(--font-b)", outline: "none",
-                    }}
+                    style={nameInputStyle}
                     type="text"
-                    value={current.name}
+                    value={cur.name}
                     onChange={(e) => updateMenuName(item.id, e.target.value)}
                     onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
                     onBlur={(e) => e.target.style.borderColor = "var(--border)"}
                   />
-                </div>
-                {/* Price row */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", minWidth: 42 }}>Price</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 700 }}>₦</span>
-                    <input
-                      style={inputStyle}
-                      type="number"
-                      value={current.price}
-                      onChange={(e) => updateMenuPrice(item.id, e.target.value)}
-                      onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
-                      onBlur={(e) => e.target.style.borderColor = "var(--border)"}
-                    />
-                  </div>
-                  <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>{item.serves} · ~{item.time} min</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Add-ons */}
-        <div className="card" style={{ padding: 20, marginBottom: 100 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>
-            🌶️ Add-ons
-          </p>
-          {(editAddons || addons).map((item) => {
-            const current = (editAddons || addons).find(i => i.id === item.id) || item;
-            return (
-              <div key={item.id} style={{ padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
-                {/* Label row */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", minWidth: 42 }}>Name</span>
                   <input
-                    style={{
-                      flex: 1, padding: "8px 12px", borderRadius: 8, fontSize: 14,
-                      fontWeight: 700, border: "2px solid var(--border)", color: "var(--ink)",
-                      fontFamily: "var(--font-b)", outline: "none",
-                    }}
-                    type="text"
-                    value={current.label}
-                    onChange={(e) => updateAddonName(item.id, e.target.value)}
+                    style={priceInputStyle}
+                    type="number"
+                    value={cur.price}
+                    onChange={(e) => updateMenuPrice(item.id, e.target.value)}
                     onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
                     onBlur={(e) => e.target.style.borderColor = "var(--border)"}
                   />
                 </div>
-                {/* Price row */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", minWidth: 42 }}>Price</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 700 }}>₦</span>
-                    <input
-                      style={inputStyle}
-                      type="number"
-                      value={current.price}
-                      onChange={(e) => updateAddonPrice(item.id, e.target.value)}
-                      onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
-                      onBlur={(e) => e.target.style.borderColor = "var(--border)"}
-                    />
-                  </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Add-ons tab */}
+        {activeTab === "addons" && (
+          <div className="card" style={{ padding: "20px 16px", marginBottom: 100 }}>
+            <ColHeader />
+            {(editAddons || addons).map((item) => {
+              const cur = (editAddons || addons).find(i => i.id === item.id) || item;
+              return (
+                <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10, marginBottom: 10, alignItems: "center" }}>
+                  <input
+                    style={nameInputStyle}
+                    type="text"
+                    value={cur.label}
+                    onChange={(e) => updateAddonName(item.id, e.target.value)}
+                    onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                    onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                  />
+                  <input
+                    style={priceInputStyle}
+                    type="number"
+                    value={cur.price}
+                    onChange={(e) => updateAddonPrice(item.id, e.target.value)}
+                    onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                    onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                  />
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
       </div>
       <VendorNav current="vendor_prices" nav={nav} logout={() => { sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
