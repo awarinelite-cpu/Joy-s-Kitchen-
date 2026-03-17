@@ -71,7 +71,7 @@ const ringAlarm = () => {
 };
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const VENDOR_EMAIL = "joy@joyskitchen.com"; // ← Change this to the real vendor email
+const VENDOR_EMAIL = "vendor@joyskitchen.com"; // ← Change this to the real vendor email
 const NOODLE_BG = "/NOODLES_images.jpg";
 
 const DEFAULT_MENU = [
@@ -100,11 +100,11 @@ const EGGS = [
 ];
 
 const ADDONS = [
-  { id: "extra_spice",  label: "Extra Spice 🌶️", },
-  { id: "extra_sauce",  label: "Extra Sauce 🥫",  },
-  { id: "extra_veggie", label: "Extra Veggies 🥦",},
-  { id: "chicken",      label: "Chicken 🍗",  },
-  { id: "shrimp",       label: "Shrimp 🍤", },
+  { id: "extra_spice",  label: "Extra Spice 🌶️",  price: 50  },
+  { id: "extra_sauce",  label: "Extra Sauce 🥫",   price: 100 },
+  { id: "extra_veggie", label: "Extra Veggies 🥦", price: 150 },
+  { id: "chicken",      label: "Chicken 🍗",        price: 400 },
+  { id: "shrimp",       label: "Shrimp 🍤",         price: 500 },
 ];
 
 const STATUS_INFO = {
@@ -694,7 +694,6 @@ function CustomizePage({ nav, noodleId, toast }) {
   const liveAddons = useAddonItems();
   const noodle = liveMenu.find((n) => n.id === noodleId) || MENU.find((n) => n.id === noodleId);
   const [qty, setQty] = useState(1);
-  const [spice, setSpice] = useState("medium");
   const [egg, setEgg] = useState("none");
   const [addons, setAddons] = useState([]);
   const [note, setNote] = useState("");
@@ -722,7 +721,7 @@ function CustomizePage({ nav, noodleId, toast }) {
         customer_email: customerEmail,
         customer_uid: user?.uid || "",
         noodle_type: noodle.id, noodle_name: noodle.name,
-        quantity: qty, spice_option: spice, egg_option: egg,
+        quantity: qty, egg_option: egg,
         add_ons: addons, unit_price: unit, total_price: total, note: note.trim(),
       });
       localStorage.setItem("last_order_id", ref.id);
@@ -759,20 +758,6 @@ function CustomizePage({ nav, noodleId, toast }) {
               <span style={{ fontFamily: "var(--font-h)", fontSize: 26, fontWeight: 800, minWidth: 30, textAlign: "center" }}>{qty}</span>
               <button className="qty-btn" onClick={() => setQty(Math.min(10, qty + 1))} style={{ background: "var(--fire)", border: "none", color: "#fff" }}>+</button>
             </div>
-          </div>
-        </div>
-
-        {/* Spice */}
-        <div className="card fade-up-2" style={{ padding: 20, marginBottom: 16 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>Spice Level</p>
-          <div style={{ display: "flex", gap: 8 }}>
-            {SPICES.map((s) => (
-              <div key={s.id} className={`option-pill ${spice === s.id ? "sel" : ""}`} onClick={() => setSpice(s.id)}>
-                <div className="emoji">{s.emoji}</div>
-                <div className="name">{s.label}</div>
-                <div className="desc">{s.desc}</div>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -827,7 +812,7 @@ function CustomizePage({ nav, noodleId, toast }) {
             </div>
             <div style={{ textAlign: "right", color: "rgba(255,255,255,0.35)", fontSize: 11 }}>
               <div>{qty}× {noodle.name}</div>
-              <div>{SPICES.find((s) => s.id === spice)?.label} · {EGGS.find((e) => e.id === egg)?.emoji}</div>
+              <div>{EGGS.find((e) => e.id === egg)?.emoji}</div>
             </div>
           </div>
           <button className="btn btn-fire btn-full" onClick={proceed} disabled={loading} style={{ padding: 15, fontSize: 15 }}>
@@ -1050,7 +1035,6 @@ function OrderStatusPage({ nav, orderId, toast }) {
             <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>Order Summary</p>
             <div className="row"><span className="lbl">Item</span><span className="val">{order.noodle_name}</span></div>
             <div className="row"><span className="lbl">Quantity</span><span className="val">× {order.quantity}</span></div>
-            <div className="row"><span className="lbl">Spice</span><span className="val">{SPICES.find((s) => s.id === order.spice_option)?.label || order.spice_option}</span></div>
             <div className="row"><span className="lbl">Egg</span><span className="val">{EGGS.find((e) => e.id === order.egg_option)?.label || order.egg_option}</span></div>
             {order.add_ons?.length > 0 && <div className="row"><span className="lbl">Add-ons</span><span className="val">{order.add_ons.join(", ")}</span></div>}
             {order.note && <div className="row"><span className="lbl">Note</span><span className="val">{order.note}</span></div>}
@@ -1317,7 +1301,6 @@ function VendorQueuePage({ nav, toast, activePage }) {
                     {[
                       ["🍜", MENU.find((m) => m.id === order.noodle_type)?.name || order.noodle_name],
                       ["🔢", `× ${order.quantity}`],
-                      ["🌶️", SPICES.find((s) => s.id === order.spice_option)?.label || order.spice_option],
                       ["🥚", EGGS.find((e) => e.id === order.egg_option)?.label || order.egg_option],
                     ].map(([ic, val]) => (
                       <div key={ic} style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
@@ -1474,7 +1457,6 @@ function VendorOrderPage({ nav, orderId, toast }) {
             {order.customer_phone && <div className="row"><span className="lbl">Phone</span><span className="val">{order.customer_phone}</span></div>}
             <div className="row"><span className="lbl">Noodle</span><span className="val">{MENU.find((m) => m.id === order.noodle_type)?.name}</span></div>
             <div className="row"><span className="lbl">Qty</span><span className="val">× {order.quantity}</span></div>
-            <div className="row"><span className="lbl">Spice</span><span className="val">{SPICES.find((s) => s.id === order.spice_option)?.label}</span></div>
             <div className="row"><span className="lbl">Egg</span><span className="val">{EGGS.find((e) => e.id === order.egg_option)?.label}</span></div>
             {order.add_ons?.length > 0 && <div className="row"><span className="lbl">Add-ons</span><span className="val">{order.add_ons.map((id) => ADDONS.find((a) => a.id === id)?.label || id).join(", ")}</span></div>}
             {order.note && <div className="row"><span className="lbl">Note 📝</span><span className="val" style={{ color: "var(--fire)", fontStyle: "italic" }}>{order.note}</span></div>}
@@ -1521,8 +1503,14 @@ function VendorPricesPage({ nav, toast }) {
   const updateMenuPrice = (id, val) =>
     setEditMenu(p => p.map(i => i.id === id ? { ...i, price: Number(val) || 0 } : i));
 
+  const updateMenuName = (id, val) =>
+    setEditMenu(p => p.map(i => i.id === id ? { ...i, name: val } : i));
+
   const updateAddonPrice = (id, val) =>
     setEditAddons(p => p.map(i => i.id === id ? { ...i, price: Number(val) || 0 } : i));
+
+  const updateAddonName = (id, val) =>
+    setEditAddons(p => p.map(i => i.id === id ? { ...i, label: val } : i));
 
   const inputStyle = {
     width: 110, padding: "8px 10px", borderRadius: 8, fontSize: 14, fontWeight: 700,
@@ -1534,7 +1522,7 @@ function VendorPricesPage({ nav, toast }) {
     <div className="page" style={{ background: "var(--cream)" }}>
       <div className="topbar">
         <div className="topbar-inner" style={{ maxWidth: 900 }}>
-          <div><h1>Edit Prices</h1><div className="sub">Tap any price to change it</div></div>
+          <div><h1>Edit Menu</h1><div className="sub">Tap any name or price to edit</div></div>
           <button className="btn btn-fire btn-sm" onClick={saveAll} disabled={saving} style={{ marginLeft: "auto" }}>
             {saving ? "Saving…" : "Save All ✓"}
           </button>
@@ -1548,23 +1536,45 @@ function VendorPricesPage({ nav, toast }) {
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>
             🍜 Menu Items
           </p>
-          {(editMenu || menu).map((item) => (
-            <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>{item.name}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{item.serves} · ~{item.time} min</div>
+          {(editMenu || menu).map((item) => {
+            const current = (editMenu || menu).find(i => i.id === item.id) || item;
+            return (
+              <div key={item.id} style={{ padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
+                {/* Name row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", minWidth: 42 }}>Name</span>
+                  <input
+                    style={{
+                      flex: 1, padding: "8px 12px", borderRadius: 8, fontSize: 14,
+                      fontWeight: 700, border: "2px solid var(--border)", color: "var(--ink)",
+                      fontFamily: "var(--font-b)", outline: "none",
+                    }}
+                    type="text"
+                    value={current.name}
+                    onChange={(e) => updateMenuName(item.id, e.target.value)}
+                    onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                    onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                  />
+                </div>
+                {/* Price row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", minWidth: 42 }}>Price</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 700 }}>₦</span>
+                    <input
+                      style={inputStyle}
+                      type="number"
+                      value={current.price}
+                      onChange={(e) => updateMenuPrice(item.id, e.target.value)}
+                      onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                      onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                    />
+                  </div>
+                  <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>{item.serves} · ~{item.time} min</span>
+                </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 13, color: "var(--muted)" }}>₦</span>
-                <input
-                  style={inputStyle}
-                  type="number"
-                  value={(editMenu || menu).find(i => i.id === item.id)?.price || item.price}
-                  onChange={(e) => updateMenuPrice(item.id, e.target.value)}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Add-ons */}
@@ -1572,20 +1582,44 @@ function VendorPricesPage({ nav, toast }) {
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>
             🌶️ Add-ons
           </p>
-          {(editAddons || addons).map((item) => (
-            <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>{item.label}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 13, color: "var(--muted)" }}>₦</span>
-                <input
-                  style={inputStyle}
-                  type="number"
-                  value={(editAddons || addons).find(i => i.id === item.id)?.price || item.price}
-                  onChange={(e) => updateAddonPrice(item.id, e.target.value)}
-                />
+          {(editAddons || addons).map((item) => {
+            const current = (editAddons || addons).find(i => i.id === item.id) || item;
+            return (
+              <div key={item.id} style={{ padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
+                {/* Label row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", minWidth: 42 }}>Name</span>
+                  <input
+                    style={{
+                      flex: 1, padding: "8px 12px", borderRadius: 8, fontSize: 14,
+                      fontWeight: 700, border: "2px solid var(--border)", color: "var(--ink)",
+                      fontFamily: "var(--font-b)", outline: "none",
+                    }}
+                    type="text"
+                    value={current.label}
+                    onChange={(e) => updateAddonName(item.id, e.target.value)}
+                    onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                    onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                  />
+                </div>
+                {/* Price row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", minWidth: 42 }}>Price</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 700 }}>₦</span>
+                    <input
+                      style={inputStyle}
+                      type="number"
+                      value={current.price}
+                      onChange={(e) => updateAddonPrice(item.id, e.target.value)}
+                      onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                      onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
       </div>
