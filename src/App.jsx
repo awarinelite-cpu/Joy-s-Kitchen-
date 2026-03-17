@@ -12,14 +12,14 @@ import {
 // ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
 // Replace these with your actual Firebase project values
 const firebaseConfig = {
-  apiKey: "AIzaSyAB8yCfmdvOTWRpj50Hhc7AWuabWLDvy6k",
-  authDomain: "nacon-post-utme-past-question.firebaseapp.com",
-  databaseURL: "https://nacon-post-utme-past-question-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "nacon-post-utme-past-question",
-  storageBucket: "nacon-post-utme-past-question.firebasestorage.app",
-  messagingSenderId: "1090299637128",
-  appId: "1:1090299637128:web:12393e4547baca6b9fde3d",
-  measurementId: "G-XN0B2PRWEX",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
