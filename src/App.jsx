@@ -644,10 +644,13 @@ function CustomizePage({ nav, noodleId, toast }) {
   const [spice, setSpice] = useState("medium");
   const [egg, setEgg] = useState("none");
   const [addons, setAddons] = useState([]);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Get logged-in user details from Firebase Auth
+  const user = auth.currentUser;
+  const customerName = user?.displayName || user?.email?.split("@")[0] || "Customer";
+  const customerEmail = user?.email || "";
 
   if (!noodle) { nav("menu"); return null; }
 
@@ -659,11 +662,12 @@ function CustomizePage({ nav, noodleId, toast }) {
   const toggleAddon = (id) => setAddons((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
 
   const proceed = async () => {
-    if (!name.trim()) { toast("Please enter your name", "⚠️"); return; }
     setLoading(true);
     try {
       const ref = await placeOrder({
-        customer_name: name.trim(), customer_phone: phone.trim(),
+        customer_name: customerName,
+        customer_email: customerEmail,
+        customer_uid: user?.uid || "",
         noodle_type: noodle.id, noodle_name: noodle.name,
         quantity: qty, spice_option: spice, egg_option: egg,
         add_ons: addons, unit_price: unit, total_price: total, note: note.trim(),
@@ -692,21 +696,8 @@ function CustomizePage({ nav, noodleId, toast }) {
 
       <div className="wrap" style={{ paddingTop: 20, paddingBottom: 130 }}>
 
-        {/* Details */}
-        <div className="card fade-up" style={{ padding: 20, marginBottom: 16 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>Your Details</p>
-          <div className="field" style={{ marginBottom: 10 }}>
-            <label>Full Name *</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. John Adeyemi" />
-          </div>
-          <div className="field">
-            <label>Phone (optional)</label>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="080x xxxx xxxx" type="tel" />
-          </div>
-        </div>
-
         {/* Quantity */}
-        <div className="card fade-up-1" style={{ padding: 20, marginBottom: 16 }}>
+        <div className="card fade-up" style={{ padding: 20, marginBottom: 16 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>Quantity</p>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontFamily: "var(--font-h)", fontSize: 17, fontWeight: 700 }}>{noodle.name}</span>
