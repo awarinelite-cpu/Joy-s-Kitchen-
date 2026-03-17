@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 import {
-  getFirestore, collection, addDoc, updateDoc, doc, onSnapshot,
+  getFirestore, collection, addDoc, updateDoc, setDoc, doc, onSnapshot,
   query, where, orderBy, serverTimestamp, getDocs, Timestamp
 } from "firebase/firestore";
 import {
@@ -74,11 +74,18 @@ const ringAlarm = () => {
 const VENDOR_EMAIL = "vendor@joyskitchen.com"; // ← Change this to the real vendor email
 const NOODLE_BG = "/NOODLES_images.jpg";
 
-const MENU = [
-  { id: "small",  name: "Small Bowl",  price: 700,  time: 5,  serves: "1 person",  tag: "Starter" },
-  { id: "medium", name: "Medium Bowl", price: 900,  time: 7,  serves: "1–2 persons", tag: "Best Value" },
-  { id: "large",  name: "Large Bowl",  price: 1200, time: 10, serves: "2 persons", tag: "Fan Favourite" },
+const DEFAULT_MENU = [
+  { id: "hungry_man",   name: "Hungry Man",        price: 1500, time: 8,  serves: "1–2 persons", tag: "Best Seller" },
+  { id: "super_pack",   name: "Super Pack",         price: 1200, time: 7,  serves: "1 person",    tag: "Popular" },
+  { id: "relish",       name: "Indomie Relish",     price: 800,  time: 5,  serves: "1 person",    tag: "Classic" },
+  { id: "onion_chicken",name: "Onion Chicken",      price: 900,  time: 6,  serves: "1 person",    tag: "Fan Favourite" },
+  { id: "pepper_chicken",name: "Pepper Chicken",    price: 950,  time: 6,  serves: "1 person",    tag: "Spicy" },
+  { id: "jollof",       name: "Jollof Indomie",     price: 1000, time: 7,  serves: "1–2 persons", tag: "Nigerian Fave" },
+  { id: "stir_fry",     name: "Stir Fry Noodles",   price: 1100, time: 8,  serves: "1–2 persons", tag: "Special" },
+  { id: "original",     name: "Original Indomie",   price: 700,  time: 5,  serves: "1 person",    tag: "Starter" },
 ];
+// MENU is loaded from Firestore (vendor can edit prices), falls back to DEFAULT_MENU
+let MENU = [...DEFAULT_MENU];
 
 const SPICES = [
   { id: "mild",   label: "Mild",   emoji: "🟢", desc: "Light & smooth" },
@@ -180,6 +187,48 @@ const useAllOrders = () => {
   }, []);
   return orders;
 };
+
+// Load menu prices from Firestore so vendor edits reflect for all customers
+const useMenuItems = () => {
+  const [menu, setMenu] = useState(DEFAULT_MENU);
+  useEffect(() => {
+    return onSnapshot(doc(db, "settings", "menu"), (s) => {
+      if (s.exists() && s.data().items) {
+        setMenu(s.data().items);
+        MENU = s.data().items; // update global reference
+      }
+    });
+  }, []);
+  return menu;
+};
+
+const saveMenuItems = (items) =>
+  setDoc(doc(db, "settings", "menu"), { items }, { merge: true });
+
+const DEFAULT_ADDONS = [
+  { id: "extra_spice",  label: "Extra Spice 🌶️",  price: 50  },
+  { id: "extra_sauce",  label: "Extra Sauce 🥫",   price: 100 },
+  { id: "extra_veggie", label: "Extra Veggies 🥦", price: 150 },
+  { id: "chicken",      label: "Chicken 🍗",        price: 400 },
+  { id: "shrimp",       label: "Shrimp 🍤",         price: 500 },
+];
+let ADDONS_LIVE = [...DEFAULT_ADDONS];
+
+const useAddonItems = () => {
+  const [addons, setAddons] = useState(DEFAULT_ADDONS);
+  useEffect(() => {
+    return onSnapshot(doc(db, "settings", "addons"), (s) => {
+      if (s.exists() && s.data().items) {
+        setAddons(s.data().items);
+        ADDONS_LIVE = s.data().items;
+      }
+    });
+  }, []);
+  return addons;
+};
+
+const saveAddonItems = (items) =>
+  setDoc(doc(db, "settings", "addons"), { items }, { merge: true });
 
 // ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
 const STYLES = `
@@ -590,6 +639,8 @@ function HomePage({ nav, toast }) {
   );
 }
 function MenuPage({ nav }) {
+  const liveMenu = useMenuItems();
+  const liveAddons = useAddonItems();
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
       <div className="topbar">
@@ -610,7 +661,7 @@ function MenuPage({ nav }) {
           </div>
         </div>
 
-        {MENU.map((item, i) => (
+        {liveMenu.map((item, i) => (
           <div key={item.id} onClick={() => nav("customize", { noodleId: item.id })}
             className={`card fade-up`}
             style={{ padding: 20, marginBottom: 14, cursor: "pointer", animationDelay: `${i * 0.1}s`, transition: "all 0.2s" }}
@@ -639,7 +690,9 @@ function MenuPage({ nav }) {
 }
 
 function CustomizePage({ nav, noodleId, toast }) {
-  const noodle = MENU.find((n) => n.id === noodleId);
+  const liveMenu = useMenuItems();
+  const liveAddons = useAddonItems();
+  const noodle = liveMenu.find((n) => n.id === noodleId) || MENU.find((n) => n.id === noodleId);
   const [qty, setQty] = useState(1);
   const [spice, setSpice] = useState("medium");
   const [egg, setEgg] = useState("none");
@@ -655,7 +708,7 @@ function CustomizePage({ nav, noodleId, toast }) {
   if (!noodle) { nav("menu"); return null; }
 
   const eggExtra = EGGS.find((e) => e.id === egg)?.extra || 0;
-  const addonTotal = addons.reduce((s, id) => s + (ADDONS.find((a) => a.id === id)?.price || 0), 0);
+  const addonTotal = addons.reduce((s, id) => s + (liveAddons.find((a) => a.id === id)?.price || 0), 0);
   const unit = noodle.price + eggExtra + addonTotal;
   const total = unit * qty;
 
@@ -742,7 +795,7 @@ function CustomizePage({ nav, noodleId, toast }) {
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>
             Add-ons <span style={{ textTransform: "none", fontWeight: 400, fontSize: 11 }}>(optional)</span>
           </p>
-          {ADDONS.map((a) => (
+          {liveAddons.map((a) => (
             <div key={a.id} className={`addons-item ${addons.includes(a.id) ? "sel" : ""}`} onClick={() => toggleAddon(a.id)}>
               <span style={{ fontSize: 14, fontWeight: 600 }}>{a.label}</span>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1179,6 +1232,7 @@ function VendorNav({ current, nav, logout }) {
         { id: "vendor_queue", icon: "📋", label: "Queue" },
         { id: "vendor_dashboard", icon: "📊", label: "Dashboard" },
         { id: "vendor_sales", icon: "💰", label: "Sales" },
+        { id: "vendor_prices", icon: "🏷️", label: "Prices" },
       ].map((item) => (
         <button key={item.id} onClick={() => nav(item.id)} className={current === item.id ? "active" : ""}>
           <span style={{ fontSize: 20 }}>{item.icon}</span>
@@ -1441,6 +1495,105 @@ function VendorOrderPage({ nav, orderId, toast }) {
   );
 }
 
+function VendorPricesPage({ nav, toast }) {
+  const menu = useMenuItems();
+  const addons = useAddonItems();
+  const [editMenu, setEditMenu] = useState(null);
+  const [editAddons, setEditAddons] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  // Init local editable copies
+  useEffect(() => { if (menu && !editMenu) setEditMenu(menu.map(i => ({ ...i }))); }, [menu]);
+  useEffect(() => { if (addons && !editAddons) setEditAddons(addons.map(i => ({ ...i }))); }, [addons]);
+
+  const saveAll = async () => {
+    setSaving(true);
+    try {
+      await saveMenuItems(editMenu);
+      await saveAddonItems(editAddons);
+      toast("Prices saved! ✅", "💰");
+    } catch {
+      toast("Failed to save. Try again.", "❌");
+    }
+    setSaving(false);
+  };
+
+  const updateMenuPrice = (id, val) =>
+    setEditMenu(p => p.map(i => i.id === id ? { ...i, price: Number(val) || 0 } : i));
+
+  const updateAddonPrice = (id, val) =>
+    setEditAddons(p => p.map(i => i.id === id ? { ...i, price: Number(val) || 0 } : i));
+
+  const inputStyle = {
+    width: 110, padding: "8px 10px", borderRadius: 8, fontSize: 14, fontWeight: 700,
+    border: "2px solid var(--border)", color: "var(--fire)", fontFamily: "var(--font-h)",
+    textAlign: "right", outline: "none",
+  };
+
+  return (
+    <div className="page" style={{ background: "var(--cream)" }}>
+      <div className="topbar">
+        <div className="topbar-inner" style={{ maxWidth: 900 }}>
+          <div><h1>Edit Prices</h1><div className="sub">Tap any price to change it</div></div>
+          <button className="btn btn-fire btn-sm" onClick={saveAll} disabled={saving} style={{ marginLeft: "auto" }}>
+            {saving ? "Saving…" : "Save All ✓"}
+          </button>
+        </div>
+      </div>
+
+      <div className="wrap-wide" style={{ paddingTop: 20 }}>
+
+        {/* Menu Items */}
+        <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>
+            🍜 Menu Items
+          </p>
+          {(editMenu || menu).map((item) => (
+            <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{item.name}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{item.serves} · ~{item.time} min</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 13, color: "var(--muted)" }}>₦</span>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  value={(editMenu || menu).find(i => i.id === item.id)?.price || item.price}
+                  onChange={(e) => updateMenuPrice(item.id, e.target.value)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add-ons */}
+        <div className="card" style={{ padding: 20, marginBottom: 100 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>
+            🌶️ Add-ons
+          </p>
+          {(editAddons || addons).map((item) => (
+            <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{item.label}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 13, color: "var(--muted)" }}>₦</span>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  value={(editAddons || addons).find(i => i.id === item.id)?.price || item.price}
+                  onChange={(e) => updateAddonPrice(item.id, e.target.value)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </div>
+      <VendorNav current="vendor_prices" nav={nav} logout={() => { sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
+    </div>
+  );
+}
+
 function VendorSalesPage({ nav, toast }) {
   const allOrders = useAllOrders();
   const paid = allOrders.filter((o) => o.payment_status === "paid");
@@ -1557,6 +1710,7 @@ export default function App() {
       {page === "vendor_dashboard"&& <VendorDashboardPage {...pageProps} />}
       {page === "vendor_order"    && <VendorOrderPage {...pageProps} />}
       {page === "vendor_sales"    && <VendorSalesPage {...pageProps} />}
+      {page === "vendor_prices"   && <VendorPricesPage {...pageProps} />}
     </>
   );
 }
