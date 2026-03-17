@@ -30,46 +30,16 @@ const auth = getAuth(firebaseApp);
 const requestNotificationPermission = async () => {
   if (!("Notification" in window)) return false;
   if (Notification.permission === "granted") return true;
-  if (Notification.permission === "denied") return false;
   const result = await Notification.requestPermission();
   return result === "granted";
 };
 
-// Register the service worker for PWA + background notifications
-const registerServiceWorker = async () => {
-  if (!("serviceWorker" in navigator)) return null;
-  try {
-    const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-    console.log("[PWA] Service worker registered:", reg.scope);
-    return reg;
-  } catch (err) {
-    console.warn("[PWA] Service worker registration failed:", err);
-    return null;
+// Send a push notification (works even when app is in background via SW)
+const sendPushNotification = (title, body, icon = "/NOODLES_images.jpg") => {
+  if (Notification.permission === "granted") {
+    const n = new Notification(title, { body, icon, badge: "/NOODLES_images.jpg", vibrate: [200, 100, 200] });
+    setTimeout(() => n.close(), 6000);
   }
-};
-
-// Send a push notification — uses SW when available so it works in background
-const sendPushNotification = async (title, body, icon = "/NOODLES_images.jpg") => {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  try {
-    if ("serviceWorker" in navigator) {
-      const reg = await navigator.serviceWorker.getRegistration("/");
-      if (reg) {
-        reg.showNotification(title, {
-          body,
-          icon,
-          badge: icon,
-          vibrate: [200, 100, 200],
-        });
-        return;
-      }
-    }
-  } catch (e) {
-    console.warn("[Notif] SW notification failed, falling back:", e);
-  }
-  // Fallback: foreground-only notification
-  const n = new Notification(title, { body, icon, badge: icon, vibrate: [200, 100, 200] });
-  setTimeout(() => n.close(), 6000);
 };
 
 // Generate a loud beep ring using Web Audio API
@@ -1512,27 +1482,34 @@ function VendorPricesPage({ nav, toast }) {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("menu"); // "menu" | "addons"
 
-  useEffect(() => { if (menu && !editMenu) setEditMenu(menu.map(i => ({ ...i }))); }, [menu]);
-  useEffect(() => { if (addons && !editAddons) setEditAddons(addons.map(i => ({ ...i }))); }, [addons]);
+  // Sync from Firestore whenever data loads (only if vendor hasn't started editing yet)
+  useEffect(() => {
+    if (menu?.length) setEditMenu(prev => prev ?? menu.map(i => ({ ...i })));
+  }, [menu]);
+  useEffect(() => {
+    if (addons?.length) setEditAddons(prev => prev ?? addons.map(i => ({ ...i })));
+  }, [addons]);
 
   const saveAll = async () => {
+    if (!editMenu || !editAddons) { toast("Still loading, please wait…", "⏳"); return; }
     setSaving(true);
     try {
       await saveMenuItems(editMenu);
       await saveAddonItems(editAddons);
       toast("Saved successfully ✅", "💰");
-    } catch {
-      toast("Failed to save. Try again.", "❌");
+    } catch (e) {
+      console.error("Save error:", e);
+      toast(`Save failed: ${e.message || "Check your connection"}`, "❌");
     }
     setSaving(false);
   };
 
   const updateMenuPrice = (id, val) =>
-    setEditMenu(p => p.map(i => i.id === id ? { ...i, price: Number(val) || 0 } : i));
+    setEditMenu(p => p.map(i => i.id === id ? { ...i, price: val === "" ? 0 : Number(val) } : i));
   const updateMenuName = (id, val) =>
     setEditMenu(p => p.map(i => i.id === id ? { ...i, name: val } : i));
   const updateAddonPrice = (id, val) =>
-    setEditAddons(p => p.map(i => i.id === id ? { ...i, price: Number(val) || 0 } : i));
+    setEditAddons(p => p.map(i => i.id === id ? { ...i, price: val === "" ? 0 : Number(val) } : i));
   const updateAddonName = (id, val) =>
     setEditAddons(p => p.map(i => i.id === id ? { ...i, label: val } : i));
 
@@ -1601,7 +1578,7 @@ function VendorPricesPage({ nav, toast }) {
                   <input
                     style={priceInputStyle}
                     type="number"
-                    value={cur.price}
+                    value={cur.price ?? ""}
                     onChange={(e) => updateMenuPrice(item.id, e.target.value)}
                     onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
                     onBlur={(e) => e.target.style.borderColor = "var(--border)"}
@@ -1631,7 +1608,7 @@ function VendorPricesPage({ nav, toast }) {
                   <input
                     style={priceInputStyle}
                     type="number"
-                    value={cur.price}
+                    value={cur.price ?? ""}
                     onChange={(e) => updateAddonPrice(item.id, e.target.value)}
                     onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
                     onBlur={(e) => e.target.style.borderColor = "var(--border)"}
@@ -1716,14 +1693,6 @@ export default function App() {
   const [params, setParams] = useState({});
   const [vendorAuth, setVendorAuth] = useState(() => sessionStorage.getItem("vendor_auth") === "true");
   const { show: toast, ToastContainer } = useToast();
-
-  // ── PWA: register service worker + request notification permission on mount
-  useEffect(() => {
-    registerServiceWorker();
-    // Small delay so the permission prompt doesn't fire immediately on first load
-    const t = setTimeout(() => requestNotificationPermission(), 2000);
-    return () => clearTimeout(t);
-  }, []);
 
   const nav = useCallback((target, p = {}) => {
     // Guard vendor pages
