@@ -100,11 +100,11 @@ const EGGS = [
 ];
 
 const ADDONS = [
-  { id: "extra_spice",  label: "Extra Spice 🌶️",  price: 50  },
-  { id: "extra_sauce",  label: "Extra Sauce 🥫",   price: 100 },
-  { id: "extra_veggie", label: "Extra Veggies 🥦", price: 150 },
-  { id: "chicken",      label: "Chicken 🍗",        price: 400 },
-  { id: "shrimp",       label: "Shrimp 🍤",         price: 500 },
+  { id: "extra_spice",  label: "Extra Spice 🌶️",  },
+  { id: "extra_sauce",  label: "Extra Sauce 🥫",  },
+  { id: "extra_veggie", label: "Extra Veggies 🥦", },
+  { id: "chicken",      label: "Chicken 🍗",   },
+  { id: "shrimp",       label: "Shrimp 🍤",  },
 ];
 
 const STATUS_INFO = {
