@@ -1490,79 +1490,98 @@ function VendorOrderPage({ nav, orderId, toast }) {
 function VendorPricesPage({ nav, toast }) {
   const menu = useMenuItems();
   const addons = useAddonItems();
-  const [editMenu, setEditMenu] = useState(null);
-  const [editAddons, setEditAddons] = useState(null);
-  const [menuPriceRaw, setMenuPriceRaw] = useState({});
-  const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState("menu"); // "menu" | "addons"
+  const [activeTab, setActiveTab] = useState("menu");
 
+  // ── Noodle edits: kept as plain objects with string price for input control ──
+  const [editMenu, setEditMenu] = useState([]);
+  const [menuDirty, setMenuDirty] = useState(false);
+  const [savingMenu, setSavingMenu] = useState(false);
+
+  // ── Addon edits ──
+  const [editAddons, setEditAddons] = useState([]);
+  const [addonDirty, setAddonDirty] = useState(false);
+  const [savingAddons, setSavingAddons] = useState(false);
+
+  // Seed editMenu whenever Firestore pushes a fresh menu (and vendor hasn't started editing)
   useEffect(() => {
-    if (menu && !editMenu) {
-      setEditMenu(menu.map(i => ({ ...i })));
-      const raw = {};
-      menu.forEach(i => { raw[i.id] = String(i.price ?? ""); });
-      setMenuPriceRaw(raw);
+    if (!menuDirty && menu.length > 0) {
+      setEditMenu(menu.map(i => ({ ...i, priceRaw: String(i.price ?? "") })));
     }
-  }, [menu]);
+  }, [menu, menuDirty]);
 
+  // Seed editAddons whenever Firestore pushes fresh addons (and vendor hasn't started editing)
   useEffect(() => {
-    if (addons && !editAddons) {
+    if (!addonDirty && addons.length > 0) {
       setEditAddons(addons.map(i => ({ ...i })));
     }
-  }, [addons]);
+  }, [addons, addonDirty]);
 
-  const saveAll = async () => {
-    setSaving(true);
+  // ── Save noodles only ──
+  const saveMenu = async () => {
+    setSavingMenu(true);
     try {
-      const cleanMenu = (editMenu || menu).map(i => ({
-        ...i,
-        price: i.price === "" || i.price === null || i.price === undefined ? 0 : Number(i.price),
+      const clean = editMenu.map(({ priceRaw, ...rest }) => ({
+        ...rest,
+        price: priceRaw === "" || priceRaw === null ? 0 : Number(priceRaw),
       }));
-      // Add-ons always save with price: 0 — they are free
-      const cleanAddons = (editAddons || addons).map(i => ({ ...i, price: 0 }));
-      await saveMenuItems(cleanMenu);
-      await saveAddonItems(cleanAddons);
-      toast("Saved successfully ✅", "💰");
+      await saveMenuItems(clean);
+      setMenuDirty(false);
+      toast("Noodle menu saved ✅", "🍜");
     } catch (err) {
-      const msg = err?.code || err?.message || "Unknown error";
-      toast(`Save failed: ${msg}`, "❌");
-      console.error("[Save error]", err);
+      console.error("[saveMenu]", err);
+      toast(`Save failed: ${err?.message || err?.code || "Unknown error"}`, "❌");
     }
-    setSaving(false);
+    setSavingMenu(false);
   };
 
-  const updateMenuPrice = (id, val) => {
-    setMenuPriceRaw(p => ({ ...p, [id]: val }));
-    setEditMenu(p => p.map(i => i.id === id ? { ...i, price: val === "" ? 0 : Number(val) } : i));
+  // ── Save add-ons only ──
+  const saveAddons = async () => {
+    setSavingAddons(true);
+    try {
+      // Strip price entirely — add-ons are always free
+      const clean = editAddons.map(({ id, label }) => ({ id, label }));
+      await saveAddonItems(clean);
+      setAddonDirty(false);
+      toast("Add-ons saved ✅", "🌶️");
+    } catch (err) {
+      console.error("[saveAddons]", err);
+      toast(`Save failed: ${err?.message || err?.code || "Unknown error"}`, "❌");
+    }
+    setSavingAddons(false);
   };
-  const updateMenuName = (id, val) =>
+
+  const updateMenuName = (id, val) => {
+    setMenuDirty(true);
     setEditMenu(p => p.map(i => i.id === id ? { ...i, name: val } : i));
-  const updateAddonName = (id, val) =>
+  };
+  const updateMenuPrice = (id, val) => {
+    setMenuDirty(true);
+    setEditMenu(p => p.map(i => i.id === id ? { ...i, priceRaw: val } : i));
+  };
+  const updateAddonName = (id, val) => {
+    setAddonDirty(true);
     setEditAddons(p => p.map(i => i.id === id ? { ...i, label: val } : i));
+  };
 
-  const nameInputStyle = {
-    flex: 1, padding: "10px 12px", borderRadius: 9, fontSize: 14,
-    fontWeight: 600, border: "2px solid var(--border)", color: "var(--ink)",
-    fontFamily: "var(--font-b)", outline: "none", background: "#fff",
+  const inputStyle = {
+    padding: "10px 12px", borderRadius: 9, fontSize: 14, fontWeight: 600,
+    border: "2px solid var(--border)", color: "var(--ink)",
+    fontFamily: "var(--font-b)", outline: "none", background: "#fff", width: "100%",
   };
   const priceInputStyle = {
-    width: 100, padding: "10px 10px", borderRadius: 9, fontSize: 15,
-    fontWeight: 800, border: "2px solid var(--border)", color: "var(--fire)",
-    fontFamily: "var(--font-h)", textAlign: "right", outline: "none", background: "#fff",
+    ...inputStyle, width: 110, fontFamily: "var(--font-h)", fontSize: 15,
+    fontWeight: 800, color: "var(--fire)", textAlign: "right",
   };
 
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
       <div className="topbar">
         <div className="topbar-inner" style={{ maxWidth: 900 }}>
-          <div><h1>Edit Menu</h1><div className="sub">Change names and prices</div></div>
-          <button className="btn btn-fire btn-sm" onClick={saveAll} disabled={saving} style={{ marginLeft: "auto" }}>
-            {saving ? "Saving…" : "💾 Save All"}
-          </button>
+          <div><h1>Edit Menu</h1><div className="sub">Names · Prices · Add-ons</div></div>
         </div>
       </div>
 
-      <div className="wrap-wide" style={{ paddingTop: 20 }}>
+      <div className="wrap-wide" style={{ paddingTop: 20, paddingBottom: 100 }}>
 
         {/* Tab switcher */}
         <div style={{ display: "flex", gap: 6, marginBottom: 20, background: "var(--warm)", borderRadius: 12, padding: 4 }}>
@@ -1578,65 +1597,78 @@ function VendorPricesPage({ nav, toast }) {
           ))}
         </div>
 
-        {/* Noodles tab — name + price both editable */}
+        {/* ── Noodles tab ── */}
         {activeTab === "menu" && (
-          <div className="card" style={{ padding: "20px 16px", marginBottom: 20 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10, marginBottom: 10, padding: "0 2px" }}>
+          <div className="card" style={{ padding: "20px 16px", marginBottom: 16 }}>
+            {/* column headers */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10, marginBottom: 12, padding: "0 2px" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Item Name</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "right" }}>Price (₦)</span>
             </div>
-            {(editMenu || menu).map((item) => {
-              const cur = (editMenu || menu).find(i => i.id === item.id) || item;
-              return (
-                <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10, marginBottom: 10, alignItems: "center" }}>
-                  <input
-                    style={nameInputStyle}
-                    type="text"
-                    value={cur.name ?? ""}
-                    onChange={(e) => updateMenuName(item.id, e.target.value)}
-                    onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
-                    onBlur={(e) => e.target.style.borderColor = "var(--border)"}
-                  />
-                  <input
-                    style={priceInputStyle}
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={menuPriceRaw[item.id] ?? ""}
-                    onChange={(e) => updateMenuPrice(item.id, e.target.value)}
-                    onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
-                    onBlur={(e) => e.target.style.borderColor = "var(--border)"}
-                  />
-                </div>
-              );
-            })}
+
+            {editMenu.map((item) => (
+              <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10, marginBottom: 10, alignItems: "center" }}>
+                <input
+                  style={inputStyle}
+                  type="text"
+                  value={item.name ?? ""}
+                  onChange={(e) => updateMenuName(item.id, e.target.value)}
+                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                />
+                <input
+                  style={priceInputStyle}
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={item.priceRaw ?? ""}
+                  onChange={(e) => updateMenuPrice(item.id, e.target.value)}
+                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                />
+              </div>
+            ))}
+
+            <button
+              className="btn btn-fire btn-full"
+              onClick={saveMenu}
+              disabled={savingMenu || !menuDirty}
+              style={{ marginTop: 14, padding: 14, fontSize: 15 }}
+            >
+              {savingMenu ? "Saving…" : menuDirty ? "💾 Save Noodle Menu" : "✅ All Changes Saved"}
+            </button>
           </div>
         )}
 
-        {/* Add-ons tab — name only, no price (add-ons are free) */}
+        {/* ── Add-ons tab — names only, no price column ── */}
         {activeTab === "addons" && (
-          <div className="card" style={{ padding: "20px 16px", marginBottom: 100 }}>
+          <div className="card" style={{ padding: "20px 16px", marginBottom: 16 }}>
             <div style={{ background: "rgba(245,166,35,0.1)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#92610a" }}>
-              ℹ️ Add-ons are <strong>free</strong> for customers — you can only edit their names here.
+              ℹ️ Add-ons are <strong>free</strong> — edit names only.
             </div>
-            <div style={{ marginBottom: 10, padding: "0 2px" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Item Name</span>
-            </div>
-            {(editAddons || addons).map((item) => {
-              const cur = (editAddons || addons).find(i => i.id === item.id) || item;
-              return (
-                <div key={item.id} style={{ marginBottom: 10 }}>
-                  <input
-                    style={{ ...nameInputStyle, width: "100%" }}
-                    type="text"
-                    value={cur.label ?? ""}
-                    onChange={(e) => updateAddonName(item.id, e.target.value)}
-                    onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
-                    onBlur={(e) => e.target.style.borderColor = "var(--border)"}
-                  />
-                </div>
-              );
-            })}
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 12 }}>Item Name</span>
+
+            {editAddons.map((item) => (
+              <div key={item.id} style={{ marginBottom: 10 }}>
+                <input
+                  style={inputStyle}
+                  type="text"
+                  value={item.label ?? ""}
+                  onChange={(e) => updateAddonName(item.id, e.target.value)}
+                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                />
+              </div>
+            ))}
+
+            <button
+              className="btn btn-fire btn-full"
+              onClick={saveAddons}
+              disabled={savingAddons || !addonDirty}
+              style={{ marginTop: 14, padding: 14, fontSize: 15 }}
+            >
+              {savingAddons ? "Saving…" : addonDirty ? "💾 Save Add-ons" : "✅ All Changes Saved"}
+            </button>
           </div>
         )}
 
