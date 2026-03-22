@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, collection, addDoc, updateDoc, setDoc, doc, onSnapshot,
-  query, where, orderBy, serverTimestamp, getDocs, Timestamp
+  query, where, orderBy, serverTimestamp
 } from "firebase/firestore";
 import {
   getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, signOut, onAuthStateChanged
+  sendPasswordResetEmail, signOut
 } from "firebase/auth";
 
 // ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
@@ -97,14 +97,6 @@ const EGGS = [
   { id: "fried",  label: "Fried Egg",  emoji: "🍳", extra: 100 },
   { id: "boiled", label: "Boiled Egg", emoji: "🥚", extra: 50  },
   { id: "none",   label: "No Egg",     emoji: "❌", extra: 0   },
-];
-
-const ADDONS = [
-  { id: "extra_spice",  label: "Extra Spice 🌶️",  },
-  { id: "extra_sauce",  label: "Extra Sauce 🥫",  },
-  { id: "extra_veggie", label: "Extra Veggies 🥦", },
-  { id: "chicken",      label: "Chicken 🍗",   },
-  { id: "shrimp",       label: "Shrimp 🍤",  },
 ];
 
 const STATUS_INFO = {
@@ -445,13 +437,7 @@ function HomePage({ nav, toast }) {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password.trim());
-      // If vendor email → go to vendor dashboard, else → customer menu
-      if (email.trim().toLowerCase() === VENDOR_EMAIL.toLowerCase()) {
-        sessionStorage.setItem("vendor_auth", "true");
-        nav("vendor_queue");
-      } else {
-        nav("menu");
-      }
+      nav("menu");
     } catch (e) {
       toast(e.code === "auth/invalid-credential" ? "Wrong email or password" : "Login failed. Try again.", "❌");
     }
@@ -633,6 +619,13 @@ function HomePage({ nav, toast }) {
           )}
         </div>
 
+        {/* Vendor link */}
+        <button onClick={() => nav("vendor_login")} style={{
+          marginTop: 20, background: "none", border: "none", cursor: "pointer",
+          color: "rgba(255,255,255,0.28)", fontSize: 12, fontFamily: "var(--font-b)",
+        }}>
+          👨‍🍳 Vendor? Sign in here
+        </button>
 
       </div>
     </div>
@@ -640,7 +633,6 @@ function HomePage({ nav, toast }) {
 }
 function MenuPage({ nav }) {
   const liveMenu = useMenuItems();
-  const liveAddons = useAddonItems();
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
       <div className="topbar">
@@ -694,6 +686,7 @@ function CustomizePage({ nav, noodleId, toast }) {
   const liveAddons = useAddonItems();
   const noodle = liveMenu.find((n) => n.id === noodleId) || MENU.find((n) => n.id === noodleId);
   const [qty, setQty] = useState(1);
+  const [spice, setSpice] = useState("medium");
   const [egg, setEgg] = useState("none");
   const [addons, setAddons] = useState([]);
   const [note, setNote] = useState("");
@@ -707,8 +700,8 @@ function CustomizePage({ nav, noodleId, toast }) {
   if (!noodle) { nav("menu"); return null; }
 
   const eggExtra = EGGS.find((e) => e.id === egg)?.extra || 0;
-  const addonTotal = addons.reduce((s, id) => s + (liveAddons.find((a) => a.id === id)?.price || 0), 0);
-  const unit = noodle.price + eggExtra + addonTotal;
+  // Add-ons are free — no price added
+  const unit = noodle.price + eggExtra;
   const total = unit * qty;
 
   const toggleAddon = (id) => setAddons((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -721,7 +714,7 @@ function CustomizePage({ nav, noodleId, toast }) {
         customer_email: customerEmail,
         customer_uid: user?.uid || "",
         noodle_type: noodle.id, noodle_name: noodle.name,
-        quantity: qty, egg_option: egg,
+        quantity: qty, spice_level: spice, egg_option: egg,
         add_ons: addons, unit_price: unit, total_price: total, note: note.trim(),
       });
       localStorage.setItem("last_order_id", ref.id);
@@ -758,6 +751,22 @@ function CustomizePage({ nav, noodleId, toast }) {
               <span style={{ fontFamily: "var(--font-h)", fontSize: 26, fontWeight: 800, minWidth: 30, textAlign: "center" }}>{qty}</span>
               <button className="qty-btn" onClick={() => setQty(Math.min(10, qty + 1))} style={{ background: "var(--fire)", border: "none", color: "#fff" }}>+</button>
             </div>
+          </div>
+        </div>
+
+        {/* Spice Level */}
+        <div className="card fade-up-2" style={{ padding: 20, marginBottom: 16 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>
+            Spice Level <span style={{ textTransform: "none", fontWeight: 400, fontSize: 11, color: "var(--muted)" }}>(free)</span>
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            {SPICES.map((s) => (
+              <div key={s.id} className={`option-pill ${spice === s.id ? "sel" : ""}`} onClick={() => setSpice(s.id)}>
+                <div className="emoji">{s.emoji}</div>
+                <div className="name">{s.label}</div>
+                <div className="desc">{s.desc}</div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -949,7 +958,7 @@ function OrderStatusPage({ nav, orderId, toast }) {
       }
     }
     prevStatus.current = order.order_status;
-  }, [order?.order_status]);
+  }, [order?.order_status, toast]);
 
   if (!order) return <div className="spinner" />;
 
@@ -1032,6 +1041,7 @@ function OrderStatusPage({ nav, orderId, toast }) {
             <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>Order Summary</p>
             <div className="row"><span className="lbl">Item</span><span className="val">{order.noodle_name}</span></div>
             <div className="row"><span className="lbl">Quantity</span><span className="val">× {order.quantity}</span></div>
+            {order.spice_level && <div className="row"><span className="lbl">Spice</span><span className="val">{SPICES.find((s) => s.id === order.spice_level)?.emoji} {SPICES.find((s) => s.id === order.spice_level)?.label}</span></div>}
             <div className="row"><span className="lbl">Egg</span><span className="val">{EGGS.find((e) => e.id === order.egg_option)?.label || order.egg_option}</span></div>
             {order.add_ons?.length > 0 && <div className="row"><span className="lbl">Add-ons</span><span className="val">{order.add_ons.join(", ")}</span></div>}
             {order.note && <div className="row"><span className="lbl">Note</span><span className="val">{order.note}</span></div>}
@@ -1299,6 +1309,7 @@ function VendorQueuePage({ nav, toast, activePage }) {
                       ["🍜", MENU.find((m) => m.id === order.noodle_type)?.name || order.noodle_name],
                       ["🔢", `× ${order.quantity}`],
                       ["🥚", EGGS.find((e) => e.id === order.egg_option)?.label || order.egg_option],
+                      ...(order.spice_level ? [[SPICES.find(s => s.id === order.spice_level)?.emoji || "🌶️", SPICES.find(s => s.id === order.spice_level)?.label || order.spice_level]] : []),
                     ].map(([ic, val]) => (
                       <div key={ic} style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
                         <span>{ic}</span><span style={{ color: "var(--ink)", fontWeight: 600 }}>{val}</span>
@@ -1315,7 +1326,7 @@ function VendorQueuePage({ nav, toast, activePage }) {
           ))
         )}
       </div>
-      <VendorNav current="vendor_queue" nav={nav} logout={() => { sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
+      <VendorNav current="vendor_queue" nav={nav} logout={() => { signOut(auth); sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
     </div>
   );
 }
@@ -1379,13 +1390,14 @@ function VendorDashboardPage({ nav, toast }) {
           ))}
         </div>
       </div>
-      <VendorNav current="vendor_dashboard" nav={nav} logout={() => { sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
+      <VendorNav current="vendor_dashboard" nav={nav} logout={() => { signOut(auth); sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
     </div>
   );
 }
 
 function VendorOrderPage({ nav, orderId, toast }) {
   const order = useOrder(orderId);
+  const liveAddons = useAddonItems();
   const [updating, setUpdating] = useState(false);
   const [tab, setTab] = useState("details");
 
@@ -1452,10 +1464,11 @@ function VendorOrderPage({ nav, orderId, toast }) {
           <div className="card" style={{ padding: 20 }}>
             <div className="row"><span className="lbl">Customer</span><span className="val">{order.customer_name}</span></div>
             {order.customer_phone && <div className="row"><span className="lbl">Phone</span><span className="val">{order.customer_phone}</span></div>}
-            <div className="row"><span className="lbl">Noodle</span><span className="val">{MENU.find((m) => m.id === order.noodle_type)?.name}</span></div>
+            <div className="row"><span className="lbl">Noodle</span><span className="val">{MENU.find((m) => m.id === order.noodle_type)?.name || order.noodle_name}</span></div>
             <div className="row"><span className="lbl">Qty</span><span className="val">× {order.quantity}</span></div>
+            {order.spice_level && <div className="row"><span className="lbl">Spice</span><span className="val">{SPICES.find((s) => s.id === order.spice_level)?.emoji} {SPICES.find((s) => s.id === order.spice_level)?.label}</span></div>}
             <div className="row"><span className="lbl">Egg</span><span className="val">{EGGS.find((e) => e.id === order.egg_option)?.label}</span></div>
-            {order.add_ons?.length > 0 && <div className="row"><span className="lbl">Add-ons</span><span className="val">{order.add_ons.map((id) => ADDONS.find((a) => a.id === id)?.label || id).join(", ")}</span></div>}
+            {order.add_ons?.length > 0 && <div className="row"><span className="lbl">Add-ons</span><span className="val">{order.add_ons.map((id) => liveAddons.find((a) => a.id === id)?.label || id).join(", ")}</span></div>}
             {order.note && <div className="row"><span className="lbl">Note 📝</span><span className="val" style={{ color: "var(--fire)", fontStyle: "italic" }}>{order.note}</span></div>}
             <div className="row"><span className="lbl">Paid</span><span className="val" style={{ fontFamily: "var(--font-h)", fontSize: 18, color: "var(--fire)" }}>{fmt(order.total_price)}</span></div>
             <div className="row"><span className="lbl">Payment Time</span><span className="val">{fmtTime(order.payment_time)}</span></div>
@@ -1469,7 +1482,7 @@ function VendorOrderPage({ nav, orderId, toast }) {
           </div>
         )}
       </div>
-      <VendorNav current="vendor_queue" nav={nav} logout={() => { sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
+      <VendorNav current="vendor_queue" nav={nav} logout={() => { signOut(auth); sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
     </div>
   );
 }
@@ -1494,7 +1507,7 @@ function VendorPricesPage({ nav, toast }) {
 
   useEffect(() => {
     if (addons && !editAddons) {
-      setEditAddons(addons.map(i => ({ ...i, price: 0 })));
+      setEditAddons(addons.map(i => ({ ...i })));
     }
   }, [addons]);
 
@@ -1505,7 +1518,7 @@ function VendorPricesPage({ nav, toast }) {
         ...i,
         price: i.price === "" || i.price === null || i.price === undefined ? 0 : Number(i.price),
       }));
-      // Add-ons always save with price: 0 (no pricing on spices)
+      // Add-ons always save with price: 0 — they are free
       const cleanAddons = (editAddons || addons).map(i => ({ ...i, price: 0 }));
       await saveMenuItems(cleanMenu);
       await saveAddonItems(cleanAddons);
@@ -1565,7 +1578,7 @@ function VendorPricesPage({ nav, toast }) {
           ))}
         </div>
 
-        {/* Noodles tab — shows name + price */}
+        {/* Noodles tab — name + price both editable */}
         {activeTab === "menu" && (
           <div className="card" style={{ padding: "20px 16px", marginBottom: 20 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10, marginBottom: 10, padding: "0 2px" }}>
@@ -1600,9 +1613,12 @@ function VendorPricesPage({ nav, toast }) {
           </div>
         )}
 
-        {/* Add-ons tab — name only, no price */}
+        {/* Add-ons tab — name only, no price (add-ons are free) */}
         {activeTab === "addons" && (
           <div className="card" style={{ padding: "20px 16px", marginBottom: 100 }}>
+            <div style={{ background: "rgba(245,166,35,0.1)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#92610a" }}>
+              ℹ️ Add-ons are <strong>free</strong> for customers — you can only edit their names here.
+            </div>
             <div style={{ marginBottom: 10, padding: "0 2px" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Item Name</span>
             </div>
@@ -1625,7 +1641,7 @@ function VendorPricesPage({ nav, toast }) {
         )}
 
       </div>
-      <VendorNav current="vendor_prices" nav={nav} logout={() => { sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
+      <VendorNav current="vendor_prices" nav={nav} logout={() => { signOut(auth); sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
     </div>
   );
 }
@@ -1687,37 +1703,19 @@ function VendorSalesPage({ nav, toast }) {
           {allOrders.length === 0 && <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 13, padding: "20px 0" }}>No orders yet</p>}
         </div>
       </div>
-      <VendorNav current="vendor_sales" nav={nav} logout={() => { sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
+      <VendorNav current="vendor_sales" nav={nav} logout={() => { signOut(auth); sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
     </div>
   );
 }
 
-// ─── MAIN APP ROUTER ──────────────────────────────────────────────────────────
-export default function App() {
-  const [page, setPage] = useState("home");
-  const [params, setParams] = useState({});
-  const [vendorAuth, setVendorAuth] = useState(() => sessionStorage.getItem("vendor_auth") === "true");
-  const { show: toast, ToastContainer } = useToast();
-
-  const nav = useCallback((target, p = {}) => {
-    // Guard vendor pages
-    if (target.startsWith("vendor_")) {
-      if (!sessionStorage.getItem("vendor_auth")) { setPage("home"); return; }
-    }
-    setPage(target); setParams(p);
-    window.scrollTo(0, 0);
-  }, []);
-
-  const savedOrderId = localStorage.getItem("last_order_id");
-
-  // Customer bottom nav
-  const CustomerBottomNav = () => (
+// ─── CUSTOMER BOTTOM NAV (outside App to avoid remount on every render) ───────
+function CustomerBottomNav({ page, nav, savedOrderId }) {
+  return (
     <nav className="bottom-nav">
       {[
         { id: "home", icon: "🏠", label: "Home" },
         { id: "menu", icon: "🍜", label: "Menu" },
         ...(savedOrderId ? [{ id: "order", icon: "📦", label: "My Order", orderId: savedOrderId }] : []),
-
       ].map((item) => (
         <button key={item.id} onClick={() => nav(item.id, item.orderId ? { orderId: item.orderId } : {})}
           className={page === item.id ? "active" : ""}>
@@ -1727,6 +1725,24 @@ export default function App() {
       ))}
     </nav>
   );
+}
+
+// ─── MAIN APP ROUTER ──────────────────────────────────────────────────────────
+export default function App() {
+  const [page, setPage] = useState("home");
+  const [params, setParams] = useState({});
+  const { show: toast, ToastContainer } = useToast();
+
+  const nav = useCallback((target, p = {}) => {
+    // Guard vendor pages (but not the login page itself)
+    if (target.startsWith("vendor_") && target !== "vendor_login") {
+      if (!sessionStorage.getItem("vendor_auth")) { setPage("home"); return; }
+    }
+    setPage(target); setParams(p);
+    window.scrollTo(0, 0);
+  }, []);
+
+  const savedOrderId = localStorage.getItem("last_order_id");
 
   const pageProps = { nav, toast, orderId: params.orderId, noodleId: params.noodleId };
 
@@ -1736,12 +1752,12 @@ export default function App() {
       <ToastContainer />
 
       {page === "home"            && <HomePage {...pageProps} />}
-      {page === "menu"            && <><MenuPage {...pageProps} /><CustomerBottomNav /></>}
+      {page === "vendor_login"    && <VendorLogin {...pageProps} />}
+      {page === "menu"            && <><MenuPage {...pageProps} /><CustomerBottomNav page={page} nav={nav} savedOrderId={savedOrderId} /></>}
       {page === "customize"       && <CustomizePage {...pageProps} />}
       {page === "payment"         && <PaymentPage {...pageProps} />}
       {page === "order"           && <OrderStatusPage {...pageProps} />}
 
-      
       {page === "vendor_queue"    && <VendorQueuePage {...pageProps} activePage={page} />}
       {page === "vendor_dashboard"&& <VendorDashboardPage {...pageProps} />}
       {page === "vendor_order"    && <VendorOrderPage {...pageProps} />}
