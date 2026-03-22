@@ -3,27 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Primary Meta -->
+    <title>Joy's Kitchen</title>
+    <meta name="description" content="Order fresh noodles from Joy's Kitchen" />
     <meta name="theme-color" content="#e8450a" />
-    <meta name="description" content="Joy's Kitchen – Order fresh noodles online" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- PWA / Manifest -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Apple PWA (iOS "Add to Home Screen") -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Joy's Kitchen" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/NOODLES_images.jpg" />
-    <title>Joy's Kitchen 🍜</title>
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <!-- Apple splash screens (optional — add more sizes as needed) -->
+    <!-- <link rel="apple-touch-startup-image" href="/splash/splash-1170x2532.png" media="..."> -->
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-96.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-72.png" />
+
+    <!-- Open Graph (share cards) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Joy's Kitchen" />
+    <meta property="og:description" content="Order fresh noodles from Joy's Kitchen" />
+    <meta property="og:image" content="/NOODLES_images.jpg" />
+
+    <!-- Prevent phone number detection -->
+    <meta name="format-detection" content="telephone=no" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <script>
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker
-            .register("/sw.js")
-            .then((reg) => console.log("SW registered:", reg.scope))
-            .catch((err) => console.warn("SW failed:", err));
-        });
-      }
-    </script>
   </body>
 </html>
