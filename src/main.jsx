@@ -1,6 +1,4 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App.jsx";
+
 
 // Register the Workbox-generated service worker (produced by vite-plugin-pwa).
 // The virtual module is only available after `npm run build`; it is a no-op in
