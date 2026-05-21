@@ -1479,12 +1479,27 @@ function VendorPricesPage({ nav, toast }) {
       </div>
 
       <div className="wrap-wide" style={{ paddingTop: 20, paddingBottom: 100 }}>
+        {/* Tab switcher */}
         <div style={{ display: "flex", gap: 6, marginBottom: 20, background: "var(--warm)", borderRadius: 12, padding: 4 }}>
           {[["menu", "🍜 Noodles"], ["addons", "🌶️ Add-ons"]].map(([id, label]) => (
-            <button key={id} onClick={() => setActiveTab(id)} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: "none", cursor: "pointer", background: activeTab === id ? "#fff" : "transparent", color: activeTab === id ? "var(--fire)" : "var(--muted)", fontWeight: 700, fontSize: 13, fontFamily: "var(--font-b)", boxShadow: activeTab === id ? "0 1px 6px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s" }}>{label}</button>
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              style={{
+                flex: 1, padding: "11px 0", borderRadius: 10, border: "none", cursor: "pointer",
+                background: activeTab === id ? "#fff" : "transparent",
+                color: activeTab === id ? "var(--fire)" : "var(--muted)",
+                fontWeight: 700, fontSize: 13, fontFamily: "var(--font-b)",
+                boxShadow: activeTab === id ? "0 1px 6px rgba(0,0,0,0.08)" : "none",
+                transition: "all 0.15s",
+              }}
+            >
+              {label}
+            </button>
           ))}
         </div>
 
+        {/* ── Noodles tab: name + price ── */}
         {activeTab === "menu" && (
           <div className="card" style={{ padding: "20px 16px", marginBottom: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10, marginBottom: 12, padding: "0 2px" }}>
@@ -1493,8 +1508,18 @@ function VendorPricesPage({ nav, toast }) {
             </div>
             {editMenu.map((item) => (
               <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10, marginBottom: 10, alignItems: "center" }}>
-                <input style={inputStyle} type="text" value={item.name ?? ""} onChange={(e) => updateMenuName(item.id, e.target.value)} onFocus={(e) => e.target.style.borderColor = "var(--fire)"} onBlur={(e) => e.target.style.borderColor = "var(--border)"} />
-                <input style={priceInputStyle} type="number" min="0" placeholder="0" value={item.priceRaw ?? ""} onChange={(e) => updateMenuPrice(item.id, e.target.value)} onFocus={(e) => e.target.style.borderColor = "var(--fire)"} onBlur={(e) => e.target.style.borderColor = "var(--border)"} />
+                <input
+                  style={inputStyle} type="text" value={item.name ?? ""}
+                  onChange={(e) => updateMenuName(item.id, e.target.value)}
+                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                />
+                <input
+                  style={priceInputStyle} type="number" min="0" placeholder="0" value={item.priceRaw ?? ""}
+                  onChange={(e) => updateMenuPrice(item.id, e.target.value)}
+                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                />
               </div>
             ))}
             <button className="btn btn-fire btn-full" onClick={saveMenu} disabled={savingMenu || !menuDirty} style={{ marginTop: 14, padding: 14, fontSize: 15 }}>
@@ -1503,15 +1528,25 @@ function VendorPricesPage({ nav, toast }) {
           </div>
         )}
 
+        {/* ── Add-ons tab: name only, NO price column ── */}
         {activeTab === "addons" && (
           <div className="card" style={{ padding: "20px 16px", marginBottom: 16 }}>
             <div style={{ background: "rgba(245,166,35,0.1)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#92610a" }}>
               ℹ️ Add-ons are <strong>free</strong> — edit names only.
             </div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 12 }}>Item Name</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 12 }}>
+              Item Name
+            </span>
             {editAddons.map((item) => (
               <div key={item.id} style={{ marginBottom: 10 }}>
-                <input style={inputStyle} type="text" value={item.label ?? ""} onChange={(e) => updateAddonName(item.id, e.target.value)} onFocus={(e) => e.target.style.borderColor = "var(--fire)"} onBlur={(e) => e.target.style.borderColor = "var(--border)"} />
+                <input
+                  style={{ ...inputStyle, width: "100%" }}
+                  type="text"
+                  value={item.label ?? ""}
+                  onChange={(e) => updateAddonName(item.id, e.target.value)}
+                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
+                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
+                />
               </div>
             ))}
             <button className="btn btn-fire btn-full" onClick={saveAddons} disabled={savingAddons || !addonDirty} style={{ marginTop: 14, padding: 14, fontSize: 15 }}>
