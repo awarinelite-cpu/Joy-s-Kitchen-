@@ -19,52 +19,17 @@ export default defineConfig({
         scope: "/",
         start_url: "/",
         icons: [
-          {
-            src: "icons/icon-72.png",
-            sizes: "72x72",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-96.png",
-            sizes: "96x96",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-128.png",
-            sizes: "128x128",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-144.png",
-            sizes: "144x144",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-152.png",
-            sizes: "152x152",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-192.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "any maskable",
-          },
-          {
-            src: "icons/icon-384.png",
-            sizes: "384x384",
-            type: "image/png",
-          },
-          {
-            src: "icons/icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "any maskable",
-          },
+          { src: "icons/icon-72.png",  sizes: "72x72",   type: "image/png" },
+          { src: "icons/icon-96.png",  sizes: "96x96",   type: "image/png" },
+          { src: "icons/icon-128.png", sizes: "128x128", type: "image/png" },
+          { src: "icons/icon-144.png", sizes: "144x144", type: "image/png" },
+          { src: "icons/icon-152.png", sizes: "152x152", type: "image/png" },
+          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+          { src: "icons/icon-384.png", sizes: "384x384", type: "image/png" },
+          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
         ],
       },
       workbox: {
-        // Cache strategies
         runtimeCaching: [
           // Google Fonts — cache first
           {
@@ -105,12 +70,30 @@ export default defineConfig({
             },
           },
         ],
-        // Pre-cache app shell
         globPatterns: ["**/*.{js,css,html,ico,png,jpg,svg,webp,woff2}"],
-        // Don't cache Firestore/Auth API calls — they must be live
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/__\//],
       },
     }),
   ],
+
+  build: {
+    // Silence the warning — 600 kB is acceptable for a Firebase + React app.
+    // The actual splits below bring each chunk well under this limit.
+    chunkSizeWarningLimit: 600,
+
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core — changes least often, cached longest
+          "vendor-react": ["react", "react-dom"],
+
+          // Firebase split into sub-packages so only what's needed loads
+          "vendor-firebase-app":       ["firebase/app"],
+          "vendor-firebase-firestore": ["firebase/firestore"],
+          "vendor-firebase-auth":      ["firebase/auth"],
+        },
+      },
+    },
+  },
 });
