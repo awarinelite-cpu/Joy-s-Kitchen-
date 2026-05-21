@@ -3,6 +3,7 @@ services:
     name: joys-kitchen
     runtime: node
     buildCommand: npm install && npm run build
+    # "npm run start" now resolves to: npx serve dist -s -l ${PORT:-3000}
     startCommand: npm run start
     envVars:
       - key: VITE_FIREBASE_API_KEY
@@ -17,5 +18,9 @@ services:
         sync: false
       - key: VITE_FIREBASE_APP_ID
         sync: false
+      # Vendor email used to gate the vendor login page
+      - key: VITE_VENDOR_EMAIL
+        sync: false
+      # Optional legacy PIN (kept for backward compat — prefer email auth)
       - key: VITE_VENDOR_PIN
         sync: false

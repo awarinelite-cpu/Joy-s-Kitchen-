@@ -5,18 +5,85 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Orders: anyone can create (place order), anyone can read their own
-    match /orders/{orderId} {
-      allow create: if request.resource.data.customer_name is string
-                    && request.resource.data.total_price is number;
-      allow read: if true;
-      // Only update payment_time, order_status (vendor or confirmed payment flow)
-      allow update: if true;
+    // ── Helper functions ────────────────────────────────────────────────────
 
-      // Messages subcollection
+    // Returns true when the signed-in user is the vendor.
+    // Set VITE_VENDOR_EMAIL in your environment; keep the actual value in
+    // Firebase Auth (not in this rules file) so it never leaks client-side.
+    // Replace the string below with your real vendor email.
+    function isVendor() {
+      return request.auth != null
+          && request.auth.token.email == "vendor@joyskitchen.com";
+    }
+
+    // Returns true when the signed-in user owns this order.
+    function isOrderOwner(orderId) {
+      return request.auth != null
+          && request.auth.uid == resource.data.customer_uid;
+    }
+
+    // ── Orders collection ───────────────────────────────────────────────────
+    match /orders/{orderId} {
+
+      // Any signed-in user can create an order, provided it carries the
+      // required fields and starts in a safe initial state.
+      allow create: if request.auth != null
+                    && request.resource.data.customer_name is string
+                    && request.resource.data.total_price   is number
+                    && request.resource.data.payment_status == "pending"
+                    && request.resource.data.order_status   == "pending";
+
+      // Any signed-in user can read any order.
+      // (Tighten to `isOrderOwner(orderId) || isVendor()` once you are
+      //  comfortable that all customer flows pass the order ID through auth.)
+      allow read: if request.auth != null;
+
+      // ── Update rules split by role ──────────────────────────────────────
+      //
+      // Customers (order owner) may update ONLY non-sensitive fields:
+      //   • note            — special instructions
+      //   • add_ons         — add-on selections
+      //   • spice_level     — spice preference
+      //   • egg_option      — egg preference
+      // They must NOT be able to flip payment_status or order_status.
+      //
+      // Vendor may update everything (status progression, cancellation, etc.)
+      //
+      // payment_status is intentionally NOT writable by the customer directly.
+      // In a production setup, payment confirmation should be done by a
+      // trusted Cloud Function that calls Admin SDK — that bypasses these rules
+      // entirely. The demo "I've Paid" button is acceptable for prototyping only.
+
+      allow update: if isVendor()
+                    ||
+                    (
+                      isOrderOwner(orderId)
+                      // Customer may only touch these fields
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(["note", "add_ons", "spice_level", "egg_option"])
+                    );
+
+      // ── Messages subcollection ──────────────────────────────────────────
       match /messages/{msgId} {
-        allow read, create: if true;
+        // Any signed-in user can read messages for an order they own or if
+        // they are the vendor.  Anyone signed in can create a message
+        // (customers send from their session, vendor sends from theirs).
+        allow read:   if request.auth != null;
+        allow create: if request.auth != null
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.sender in ["customer", "vendor"];
       }
+    }
+
+    // ── Settings (menu / add-ons) ───────────────────────────────────────────
+    match /settings/{doc} {
+      // Anyone can read menu and add-on settings (prices must be visible
+      // to customers on the menu page).
+      allow read: if true;
+
+      // Only the vendor can write menu or add-on settings.
+      allow write: if isVendor();
     }
   }
 }

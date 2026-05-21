@@ -6,7 +6,7 @@
 |------|---------|
 | `vite.config.js` | Registers `vite-plugin-pwa`; defines manifest + Workbox caching rules |
 | `index.html` | Full PWA meta tags (theme colour, Apple splash, OG cards, viewport-fit) |
-| `src/main.jsx` | Registers the auto-generated service worker via `virtual:pwa-register` |
+| `src/main.jsx` | Registers the Workbox-generated service worker via `virtual:pwa-register` |
 | `generate_icons.js` | One-time script to produce all required icon sizes from your noodle image |
 
 ---
@@ -14,8 +14,9 @@
 ## 1 — Install dependencies
 
 ```bash
-npm install -D vite-plugin-pwa workbox-window
-npm install    # re-run to pick up new deps
+npm install
+# vite-plugin-pwa and workbox-window are now listed in package.json devDependencies
+# so a plain `npm install` picks them up automatically
 ```
 
 ---
@@ -73,28 +74,45 @@ firebase deploy --only hosting
 | Firestore / Auth API | **Not cached** — always live | — |
 
 Firestore's real-time `onSnapshot` listeners work fine offline (Firebase handles
-its own local persistence separately — enable it with `enableIndexedDbPersistence`
-if you want full offline order viewing).
+its own local persistence separately — enable it with `initializeFirestore` +
+`persistentLocalCache` if you want full offline order viewing — see below).
 
 ---
 
 ## Optional: Firestore offline persistence
 
-Add this to your `App.jsx` (or wherever Firebase is initialised) to let customers
-view their last order status even with no internet:
+> ⚠️ **Important:** `enableIndexedDbPersistence()` was **removed** in Firebase JS
+> SDK v9.20+ / v10. Use `initializeFirestore` with `persistentLocalCache` instead.
+
+Replace the standard `getFirestore` call in `App.jsx` with the following:
 
 ```js
-import { enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
-// After: const db = getFirestore(firebaseApp);
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === "failed-precondition") {
-    console.warn("Firestore persistence failed: multiple tabs open");
-  } else if (err.code === "unimplemented") {
-    console.warn("Firestore persistence not supported in this browser");
-  }
+// Replace:  const db = getFirestore(firebaseApp);
+// With:
+const db = initializeFirestore(firebaseApp, {
+  localCache: persistentLocalCache({
+    // persistentMultipleTabManager allows multiple browser tabs to share
+    // the same IndexedDB cache without conflicts.
+    tabManager: persistentMultipleTabManager(),
+  }),
 });
 ```
+
+This lets customers view their last order status even with no internet connection.
+
+**Single-tab alternative** (simpler, no cross-tab manager):
+
+```js
+import { initializeFirestore, persistentLocalCache } from "firebase/firestore";
+
+const db = initializeFirestore(firebaseApp, {
+  localCache: persistentLocalCache(),
+});
+```
+
+Both options store data in IndexedDB and are fully supported in Firebase SDK v10.
 
 ---
 
@@ -105,3 +123,14 @@ enableIndexedDbPersistence(db).catch((err) => {
 - The `apple-mobile-web-app-capable` meta tag makes the app launch full-screen.
 - `apple-mobile-web-app-status-bar-style: black-translucent` lets your dark
   background bleed into the status bar — matches the Joy's Kitchen dark theme.
+
+---
+
+## Manifest notes
+
+- The root `manifest.json` in the project has been replaced by `public/manifest.json`.
+  The old root file was using `NOODLES_images.jpg` (a JPEG) as the PWA icon source,
+  which is not a valid format for PWA icons. All icons must be PNG.
+- `vite-plugin-pwa` also generates its own manifest from `vite.config.js` at build
+  time, which takes precedence. Both the `public/` manifest and the Vite config
+  manifest must stay in sync.
