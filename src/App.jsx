@@ -6,11 +6,10 @@ import {
 } from "firebase/firestore";
 import {
   getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, signOut
+  sendPasswordResetEmail, signOut, updateProfile
 } from "firebase/auth";
 
 // ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
-// Replace these with your actual Firebase project values
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -25,8 +24,13 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 const auth = getAuth(firebaseApp);
 
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+// FIX #7: Read vendor email from env var instead of hardcoding it in the bundle.
+const VENDOR_EMAIL = (import.meta.env.VITE_VENDOR_EMAIL || "vendor@joyskitchen.com").toLowerCase();
+
+const NOODLE_BG = "/NOODLES_images.jpg";
+
 // ─── NOTIFICATIONS & SOUND ───────────────────────────────────────────────────
-// Request push notification permission
 const requestNotificationPermission = async () => {
   if (!("Notification" in window)) return false;
   if (Notification.permission === "granted") return true;
@@ -34,7 +38,6 @@ const requestNotificationPermission = async () => {
   return result === "granted";
 };
 
-// Send a push notification (works even when app is in background via SW)
 const sendPushNotification = (title, body, icon = "/NOODLES_images.jpg") => {
   if (Notification.permission === "granted") {
     const n = new Notification(title, { body, icon, badge: "/NOODLES_images.jpg", vibrate: [200, 100, 200] });
@@ -42,7 +45,6 @@ const sendPushNotification = (title, body, icon = "/NOODLES_images.jpg") => {
   }
 };
 
-// Generate a loud beep ring using Web Audio API
 const ringAlarm = () => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -58,7 +60,6 @@ const ringAlarm = () => {
       osc.start(startTime);
       osc.stop(startTime + 0.4);
     };
-    // Three-beep pattern like a doorbell/alarm
     playBeep(ctx.currentTime, 880);
     playBeep(ctx.currentTime + 0.5, 1100);
     playBeep(ctx.currentTime + 1.0, 880);
@@ -70,22 +71,16 @@ const ringAlarm = () => {
   }
 };
 
-// ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const VENDOR_EMAIL = "vendor@joyskitchen.com"; // ← Change this to the real vendor email
-const NOODLE_BG = "/NOODLES_images.jpg";
-
 const DEFAULT_MENU = [
-  { id: "hungry_man",   name: "Hungry Man",        price: 1500, time: 8,  serves: "1–2 persons", tag: "Best Seller" },
-  { id: "super_pack",   name: "Super Pack",         price: 1200, time: 7,  serves: "1 person",    tag: "Popular" },
-  { id: "relish",       name: "Indomie Relish",     price: 800,  time: 5,  serves: "1 person",    tag: "Classic" },
-  { id: "onion_chicken",name: "Onion Chicken",      price: 900,  time: 6,  serves: "1 person",    tag: "Fan Favourite" },
-  { id: "pepper_chicken",name: "Pepper Chicken",    price: 950,  time: 6,  serves: "1 person",    tag: "Spicy" },
-  { id: "jollof",       name: "Jollof Indomie",     price: 1000, time: 7,  serves: "1–2 persons", tag: "Nigerian Fave" },
-  { id: "stir_fry",     name: "Stir Fry Noodles",   price: 1100, time: 8,  serves: "1–2 persons", tag: "Special" },
-  { id: "original",     name: "Original Indomie",   price: 700,  time: 5,  serves: "1 person",    tag: "Starter" },
+  { id: "hungry_man",    name: "Hungry Man",       price: 1500, time: 8, serves: "1–2 persons", tag: "Best Seller" },
+  { id: "super_pack",    name: "Super Pack",        price: 1200, time: 7, serves: "1 person",    tag: "Popular" },
+  { id: "relish",        name: "Indomie Relish",    price: 800,  time: 5, serves: "1 person",    tag: "Classic" },
+  { id: "onion_chicken", name: "Onion Chicken",     price: 900,  time: 6, serves: "1 person",    tag: "Fan Favourite" },
+  { id: "pepper_chicken",name: "Pepper Chicken",    price: 950,  time: 6, serves: "1 person",    tag: "Spicy" },
+  { id: "jollof",        name: "Jollof Indomie",    price: 1000, time: 7, serves: "1–2 persons", tag: "Nigerian Fave" },
+  { id: "stir_fry",      name: "Stir Fry Noodles",  price: 1100, time: 8, serves: "1–2 persons", tag: "Special" },
+  { id: "original",      name: "Original Indomie",  price: 700,  time: 5, serves: "1 person",    tag: "Starter" },
 ];
-// MENU is loaded from Firestore (vendor can edit prices), falls back to DEFAULT_MENU
-let MENU = [...DEFAULT_MENU];
 
 const SPICES = [
   { id: "mild",   label: "Mild",   emoji: "🟢", desc: "Light & smooth" },
@@ -100,12 +95,12 @@ const EGGS = [
 ];
 
 const STATUS_INFO = {
-  pending:    { label: "Awaiting Payment",     color: "#d97706", bg: "#fef3c7", icon: "⏳" },
-  paid:       { label: "In Queue",             color: "#2563eb", bg: "#dbeafe", icon: "🔵" },
-  preparing:  { label: "Being Prepared 👨‍🍳",  color: "#7c3aed", bg: "#ede9fe", icon: "🍳" },
-  ready:      { label: "Ready for Pickup! 🎉", color: "#059669", bg: "#d1fae5", icon: "✅" },
-  completed:  { label: "Completed",            color: "#6b7280", bg: "#f3f4f6", icon: "☑️" },
-  cancelled:  { label: "Cancelled",            color: "#dc2626", bg: "#fee2e2", icon: "❌" },
+  pending:   { label: "Awaiting Payment",     color: "#d97706", bg: "#fef3c7", icon: "⏳" },
+  paid:      { label: "In Queue",             color: "#2563eb", bg: "#dbeafe", icon: "🔵" },
+  preparing: { label: "Being Prepared 👨‍🍳",  color: "#7c3aed", bg: "#ede9fe", icon: "🍳" },
+  ready:     { label: "Ready for Pickup! 🎉", color: "#059669", bg: "#d1fae5", icon: "✅" },
+  completed: { label: "Completed",            color: "#6b7280", bg: "#f3f4f6", icon: "☑️" },
+  cancelled: { label: "Cancelled",            color: "#dc2626", bg: "#fee2e2", icon: "❌" },
 };
 
 const fmt = (n) => `₦${Number(n).toLocaleString()}`;
@@ -180,14 +175,15 @@ const useAllOrders = () => {
   return orders;
 };
 
-// Load menu prices from Firestore so vendor edits reflect for all customers
+// FIX #9: Removed direct mutation of module-level MENU/ADDONS_LIVE globals
+// inside hooks. Components that need the live list now use the hook's return
+// value exclusively. The fallback DEFAULT_MENU is read-only.
 const useMenuItems = () => {
   const [menu, setMenu] = useState(DEFAULT_MENU);
   useEffect(() => {
     return onSnapshot(doc(db, "settings", "menu"), (s) => {
       if (s.exists() && s.data().items) {
         setMenu(s.data().items);
-        MENU = s.data().items; // update global reference
       }
     });
   }, []);
@@ -198,13 +194,12 @@ const saveMenuItems = (items) =>
   setDoc(doc(db, "settings", "menu"), { items }, { merge: true });
 
 const DEFAULT_ADDONS = [
-  { id: "extra_spice",  label: "Extra Spice 🌶️",  },
-  { id: "extra_sauce",  label: "Extra Sauce 🥫",   },
-  { id: "extra_veggie", label: "Extra Veggies 🥦", },
-  { id: "chicken",      label: "Chicken 🍗",        },
-  { id: "shrimp",       label: "Shrimp 🍤",         },
+  { id: "extra_spice",  label: "Extra Spice 🌶️" },
+  { id: "extra_sauce",  label: "Extra Sauce 🥫"  },
+  { id: "extra_veggie", label: "Extra Veggies 🥦"},
+  { id: "chicken",      label: "Chicken 🍗"       },
+  { id: "shrimp",       label: "Shrimp 🍤"        },
 ];
-let ADDONS_LIVE = [...DEFAULT_ADDONS];
 
 const useAddonItems = () => {
   const [addons, setAddons] = useState(DEFAULT_ADDONS);
@@ -212,7 +207,6 @@ const useAddonItems = () => {
     return onSnapshot(doc(db, "settings", "addons"), (s) => {
       if (s.exists() && s.data().items) {
         setAddons(s.data().items);
-        ADDONS_LIVE = s.data().items;
       }
     });
   }, []);
@@ -450,7 +444,10 @@ function HomePage({ nav, toast }) {
     if (password.length < 6) { toast("Password must be at least 6 characters", "⚠️"); return; }
     setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email.trim(), password.trim());
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password.trim());
+      // FIX #8: Persist the user's real name so orders show the correct customer name
+      // instead of falling back to an email-address prefix.
+      await updateProfile(cred.user, { displayName: name.trim() });
       nav("menu");
     } catch (e) {
       toast(e.code === "auth/email-already-in-use" ? "Email already registered" : "Registration failed.", "❌");
@@ -484,28 +481,21 @@ function HomePage({ nav, toast }) {
 
   return (
     <div style={{ minHeight: "100dvh", position: "relative", background: "#0e0905" }}>
-
-      {/* Background image — full opacity */}
       <div style={{
         position: "fixed", inset: 0, zIndex: 0,
         backgroundImage: `url(${NOODLE_BG})`,
         backgroundSize: "cover", backgroundPosition: "center top", backgroundRepeat: "no-repeat",
       }} />
-
-      {/* Overlay — darkens so text is readable */}
       <div style={{
         position: "fixed", inset: 0, zIndex: 1,
         background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.75) 50%, rgba(10,5,2,0.97) 100%)",
       }} />
 
-      {/* Content */}
       <div style={{
         position: "relative", zIndex: 2, minHeight: "100dvh",
         display: "flex", flexDirection: "column", alignItems: "center",
         justifyContent: "center", padding: "32px 24px",
       }}>
-
-        {/* Title */}
         <div className="fade-up" style={{ textAlign: "center", marginBottom: 36 }}>
           <h1 style={{
             fontFamily: "var(--font-h)", color: "#fff",
@@ -519,15 +509,12 @@ function HomePage({ nav, toast }) {
           </p>
         </div>
 
-        {/* Form card */}
         <div className="fade-up-1" style={{
           width: "100%", maxWidth: 380,
           background: "rgba(0,0,0,0.45)", backdropFilter: "blur(20px)",
           borderRadius: 20, padding: "28px 24px",
           border: "1.5px solid rgba(255,255,255,0.1)",
         }}>
-
-          {/* Name field — register only */}
           {mode === "register" && (
             <div style={{ marginBottom: 18 }}>
               <label style={labelStyle}>Full Name</label>
@@ -538,7 +525,6 @@ function HomePage({ nav, toast }) {
             </div>
           )}
 
-          {/* Email */}
           <div style={{ marginBottom: 18 }}>
             <label style={labelStyle}>Email Address</label>
             <input
@@ -548,7 +534,6 @@ function HomePage({ nav, toast }) {
             />
           </div>
 
-          {/* Password — login & register only */}
           {mode !== "forgot" && (
             <div style={{ marginBottom: 24 }}>
               <label style={labelStyle}>Password</label>
@@ -560,7 +545,6 @@ function HomePage({ nav, toast }) {
             </div>
           )}
 
-          {/* Primary action */}
           {mode === "login" && (
             <button className="btn btn-fire btn-full" onClick={handleLogin} disabled={loading}
               style={{ padding: 15, fontSize: 15, borderRadius: 12, marginBottom: 16 }}>
@@ -580,7 +564,6 @@ function HomePage({ nav, toast }) {
             </button>
           )}
 
-          {/* Secondary links */}
           {mode === "login" && (
             <>
               <button onClick={() => setMode("forgot")} style={{
@@ -619,18 +602,17 @@ function HomePage({ nav, toast }) {
           )}
         </div>
 
-        {/* Vendor link */}
         <button onClick={() => nav("vendor_login")} style={{
           marginTop: 20, background: "none", border: "none", cursor: "pointer",
           color: "rgba(255,255,255,0.28)", fontSize: 12, fontFamily: "var(--font-b)",
         }}>
           👨‍🍳 Vendor? Sign in here
         </button>
-
       </div>
     </div>
   );
 }
+
 function MenuPage({ nav }) {
   const liveMenu = useMenuItems();
   return (
@@ -655,7 +637,7 @@ function MenuPage({ nav }) {
 
         {liveMenu.map((item, i) => (
           <div key={item.id} onClick={() => nav("customize", { noodleId: item.id })}
-            className={`card fade-up`}
+            className="card fade-up"
             style={{ padding: 20, marginBottom: 14, cursor: "pointer", animationDelay: `${i * 0.1}s`, transition: "all 0.2s" }}
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--fire)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.transform = "none"; }}
@@ -684,7 +666,7 @@ function MenuPage({ nav }) {
 function CustomizePage({ nav, noodleId, toast }) {
   const liveMenu = useMenuItems();
   const liveAddons = useAddonItems();
-  const noodle = liveMenu.find((n) => n.id === noodleId) || MENU.find((n) => n.id === noodleId);
+  const noodle = liveMenu.find((n) => n.id === noodleId) || DEFAULT_MENU.find((n) => n.id === noodleId);
   const [qty, setQty] = useState(1);
   const [spice, setSpice] = useState("medium");
   const [egg, setEgg] = useState("none");
@@ -692,15 +674,15 @@ function CustomizePage({ nav, noodleId, toast }) {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Get logged-in user details from Firebase Auth
   const user = auth.currentUser;
+  // FIX #8: displayName is now always set during registration via updateProfile,
+  // so this will resolve to the real name instead of the email prefix.
   const customerName = user?.displayName || user?.email?.split("@")[0] || "Customer";
   const customerEmail = user?.email || "";
 
   if (!noodle) { nav("menu"); return null; }
 
   const eggExtra = EGGS.find((e) => e.id === egg)?.extra || 0;
-  // Add-ons are free — no price added
   const unit = noodle.price + eggExtra;
   const total = unit * qty;
 
@@ -729,9 +711,7 @@ function CustomizePage({ nav, noodleId, toast }) {
     <div className="page" style={{ background: "var(--cream)" }}>
       <div className="topbar">
         <div className="topbar-inner">
-          <button onClick={() => nav("menu")} style={{ background: "none", border: "none", cursor: "pointer", color: "#fff", padding: 4 }}>
-            ← 
-          </button>
+          <button onClick={() => nav("menu")} style={{ background: "none", border: "none", cursor: "pointer", color: "#fff", padding: 4 }}>←</button>
           <div>
             <h1>Customise</h1>
             <div className="sub">{noodle.name}</div>
@@ -740,8 +720,6 @@ function CustomizePage({ nav, noodleId, toast }) {
       </div>
 
       <div className="wrap" style={{ paddingTop: 20, paddingBottom: 130 }}>
-
-        {/* Quantity */}
         <div className="card fade-up" style={{ padding: 20, marginBottom: 16 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>Quantity</p>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -754,7 +732,6 @@ function CustomizePage({ nav, noodleId, toast }) {
           </div>
         </div>
 
-        {/* Spice Level */}
         <div className="card fade-up-2" style={{ padding: 20, marginBottom: 16 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>
             Spice Level <span style={{ textTransform: "none", fontWeight: 400, fontSize: 11, color: "var(--muted)" }}>(free)</span>
@@ -770,7 +747,6 @@ function CustomizePage({ nav, noodleId, toast }) {
           </div>
         </div>
 
-        {/* Egg */}
         <div className="card fade-up-3" style={{ padding: 20, marginBottom: 16 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>Egg Option</p>
           <div style={{ display: "flex", gap: 8 }}>
@@ -784,7 +760,6 @@ function CustomizePage({ nav, noodleId, toast }) {
           </div>
         </div>
 
-        {/* Add-ons */}
         <div className="card fade-up-4" style={{ padding: 20, marginBottom: 16 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>
             Add-ons <span style={{ textTransform: "none", fontWeight: 400, fontSize: 11 }}>(optional)</span>
@@ -799,7 +774,6 @@ function CustomizePage({ nav, noodleId, toast }) {
           ))}
         </div>
 
-        {/* Note */}
         <div className="card" style={{ padding: 20 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12 }}>Special Note</p>
           <div className="field">
@@ -808,7 +782,6 @@ function CustomizePage({ nav, noodleId, toast }) {
         </div>
       </div>
 
-      {/* Sticky footer */}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--dark)", padding: "14px 20px calc(14px + env(safe-area-inset-bottom))", borderTop: "1px solid rgba(255,255,255,0.07)", zIndex: 70 }}>
         <div className="wrap">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -849,7 +822,7 @@ function PaymentPage({ nav, orderId, toast }) {
   const confirm = async () => {
     setConfirming(true);
     toast("Verifying payment…", "⏳");
-    await new Promise((r) => setTimeout(r, 2000)); // simulate API call
+    await new Promise((r) => setTimeout(r, 2000));
     try {
       await markPaid(orderId);
       toast("Payment confirmed! You're in the queue 🎉", "✅");
@@ -877,7 +850,6 @@ function PaymentPage({ nav, orderId, toast }) {
       </div>
 
       <div className="wrap" style={{ paddingTop: 20, paddingBottom: 120 }}>
-        {/* Amount card */}
         <div className="fade-up" style={{ background: "linear-gradient(145deg, #b03006, var(--fire), #e85a25)", borderRadius: 20, padding: "28px 24px", marginBottom: 24, textAlign: "center", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: -40, right: -40, width: 140, height: 140, borderRadius: "50%", background: "rgba(255,255,255,0.07)", pointerEvents: "none" }} />
           <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Amount Due</p>
@@ -887,7 +859,6 @@ function PaymentPage({ nav, orderId, toast }) {
           </p>
         </div>
 
-        {/* Method selector */}
         <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Payment Method</p>
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
           {METHODS.map((m) => (
@@ -898,7 +869,6 @@ function PaymentPage({ nav, orderId, toast }) {
           ))}
         </div>
 
-        {/* Fields */}
         {(() => {
           const m = METHODS.find((x) => x.id === method);
           return (
@@ -941,7 +911,6 @@ function OrderStatusPage({ nav, orderId, toast }) {
   const [tab, setTab] = useState("status");
   const prevStatus = useRef(null);
 
-  // Notify customer when their order status changes
   useEffect(() => {
     if (!order) return;
     if (prevStatus.current && prevStatus.current !== order.order_status) {
@@ -963,10 +932,10 @@ function OrderStatusPage({ nav, orderId, toast }) {
   if (!order) return <div className="spinner" />;
 
   const steps = [
-    { key: "paid",      label: "Order Paid",         sub: "Payment confirmed" },
-    { key: "preparing", label: "Being Prepared",      sub: "Chef is cooking your noodles" },
-    { key: "ready",     label: "Ready for Pickup",    sub: "Come collect your order" },
-    { key: "completed", label: "Order Completed",     sub: "Enjoy your meal! 😊" },
+    { key: "paid",      label: "Order Paid",      sub: "Payment confirmed" },
+    { key: "preparing", label: "Being Prepared",   sub: "Chef is cooking your noodles" },
+    { key: "ready",     label: "Ready for Pickup", sub: "Come collect your order" },
+    { key: "completed", label: "Order Completed",  sub: "Enjoy your meal! 😊" },
   ];
 
   const statusOrder = ["paid", "preparing", "ready", "completed"];
@@ -982,7 +951,6 @@ function OrderStatusPage({ nav, orderId, toast }) {
       </div>
 
       <div className="wrap" style={{ paddingTop: 20 }}>
-        {/* Big status */}
         <div className="card fade-up" style={{ padding: 24, marginBottom: 16, textAlign: "center", background: "linear-gradient(135deg, #fff 60%, var(--warm) 100%)" }}>
           <div style={{ fontSize: 56, marginBottom: 8 }}>
             {order.order_status === "preparing" ? "👨‍🍳" : order.order_status === "ready" ? "🎉" : order.order_status === "completed" ? "✅" : "⏳"}
@@ -996,7 +964,6 @@ function OrderStatusPage({ nav, orderId, toast }) {
           </div>
         </div>
 
-        {/* Tabs */}
         <div style={{ display: "flex", gap: 6, marginBottom: 16, background: "var(--warm)", borderRadius: 12, padding: 4 }}>
           {["status", "details", "messages"].map((t) => (
             <button key={t} onClick={() => setTab(t)} style={{
@@ -1065,20 +1032,18 @@ function OrderStatusPage({ nav, orderId, toast }) {
 
 // ─── VENDOR PAGES ─────────────────────────────────────────────────────────────
 function VendorLogin({ nav, toast }) {
-  const [mode, setMode] = useState("login"); // "login" | "forgot"
+  const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) { toast("Enter email and password", "⚠️"); return; }
-
-    // ── Check vendor email BEFORE trying Firebase ──
-    if (email.trim().toLowerCase() !== VENDOR_EMAIL.toLowerCase()) {
+    // FIX #7: compare against env-sourced VENDOR_EMAIL constant, not a hardcoded string.
+    if (email.trim().toLowerCase() !== VENDOR_EMAIL) {
       toast("Access denied. Not a vendor account.", "🚫");
       return;
     }
-
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password.trim());
@@ -1116,32 +1081,13 @@ function VendorLogin({ nav, toast }) {
 
   return (
     <div style={{ minHeight: "100dvh", position: "relative", background: "#0e0905" }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: `url(${NOODLE_BG})`, backgroundSize: "cover", backgroundPosition: "center top", backgroundRepeat: "no-repeat" }} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 1, background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.75) 50%, rgba(10,5,2,0.97) 100%)" }} />
 
-      {/* Background image */}
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 0,
-        backgroundImage: `url(${NOODLE_BG})`,
-        backgroundSize: "cover", backgroundPosition: "center top", backgroundRepeat: "no-repeat",
-      }} />
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 1,
-        background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.75) 50%, rgba(10,5,2,0.97) 100%)",
-      }} />
-
-      <div style={{
-        position: "relative", zIndex: 2, minHeight: "100dvh",
-        display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "center", padding: "32px 24px",
-      }}>
-
-        {/* Title */}
+      <div style={{ position: "relative", zIndex: 2, minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px" }}>
         <div className="fade-up" style={{ textAlign: "center", marginBottom: 36 }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}>👨‍🍳</div>
-          <h1 style={{
-            fontFamily: "var(--font-h)", color: "#fff",
-            fontSize: "clamp(36px, 10vw, 52px)", fontWeight: 800,
-            textShadow: "0 2px 24px rgba(0,0,0,0.9)",
-          }}>
+          <h1 style={{ fontFamily: "var(--font-h)", color: "#fff", fontSize: "clamp(36px, 10vw, 52px)", fontWeight: 800, textShadow: "0 2px 24px rgba(0,0,0,0.9)" }}>
             Joy's<br /><span style={{ color: "var(--fire)" }}>Kitchen</span>
           </h1>
           <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, marginTop: 8, fontStyle: "italic" }}>
@@ -1149,30 +1095,20 @@ function VendorLogin({ nav, toast }) {
           </p>
         </div>
 
-        {/* Form card */}
-        <div className="fade-up-1" style={{
-          width: "100%", maxWidth: 380,
-          background: "rgba(0,0,0,0.45)", backdropFilter: "blur(20px)",
-          borderRadius: 20, padding: "28px 24px",
-          border: "1.5px solid rgba(255,255,255,0.1)",
-        }}>
+        <div className="fade-up-1" style={{ width: "100%", maxWidth: 380, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(20px)", borderRadius: 20, padding: "28px 24px", border: "1.5px solid rgba(255,255,255,0.1)" }}>
           <div style={{ marginBottom: 18 }}>
             <label style={labelStyle}>Vendor Email</label>
-            <input
-              style={inputStyle} type="email" placeholder="vendor@joyskitchen.com"
+            <input style={inputStyle} type="email" placeholder="vendor@joyskitchen.com"
               value={email} onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && mode === "login" && handleLogin()}
-            />
+              onKeyDown={(e) => e.key === "Enter" && mode === "login" && handleLogin()} />
           </div>
 
           {mode === "login" && (
             <div style={{ marginBottom: 24 }}>
               <label style={labelStyle}>Password</label>
-              <input
-                style={inputStyle} type="password" placeholder="Your password"
+              <input style={inputStyle} type="password" placeholder="Your password"
                 value={password} onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-              />
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
             </div>
           )}
 
@@ -1182,10 +1118,7 @@ function VendorLogin({ nav, toast }) {
                 style={{ padding: 15, fontSize: 15, borderRadius: 12, marginBottom: 16 }}>
                 {loading ? "Signing in…" : "Sign In →"}
               </button>
-              <button onClick={() => setMode("forgot")} style={{
-                width: "100%", background: "none", border: "none", cursor: "pointer",
-                color: "rgba(255,255,255,0.45)", fontSize: 13, padding: "6px 0", fontFamily: "var(--font-b)",
-              }}>
+              <button onClick={() => setMode("forgot")} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.45)", fontSize: 13, padding: "6px 0", fontFamily: "var(--font-b)" }}>
                 Forgot password?
               </button>
             </>
@@ -1196,34 +1129,29 @@ function VendorLogin({ nav, toast }) {
                 style={{ padding: 15, fontSize: 15, borderRadius: 12, marginBottom: 16 }}>
                 {loading ? "Sending…" : "Send Reset Link →"}
               </button>
-              <button onClick={() => setMode("login")} style={{
-                width: "100%", background: "none", border: "none", cursor: "pointer",
-                color: "rgba(255,255,255,0.45)", fontSize: 13, padding: "6px 0", fontFamily: "var(--font-b)",
-              }}>
+              <button onClick={() => setMode("login")} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.45)", fontSize: 13, padding: "6px 0", fontFamily: "var(--font-b)" }}>
                 ← Back to Sign In
               </button>
             </>
           )}
         </div>
 
-        <button onClick={() => nav("home")} style={{
-          marginTop: 20, background: "none", border: "none", cursor: "pointer",
-          color: "rgba(255,255,255,0.3)", fontSize: 12, fontFamily: "var(--font-b)",
-        }}>
+        <button onClick={() => nav("home")} style={{ marginTop: 20, background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 12, fontFamily: "var(--font-b)" }}>
           ← Customer Login
         </button>
       </div>
     </div>
   );
 }
+
 function VendorNav({ current, nav, logout }) {
   return (
     <nav className="bottom-nav">
       {[
-        { id: "vendor_queue", icon: "📋", label: "Queue" },
+        { id: "vendor_queue",     icon: "📋", label: "Queue"     },
         { id: "vendor_dashboard", icon: "📊", label: "Dashboard" },
-        { id: "vendor_sales", icon: "💰", label: "Sales" },
-        { id: "vendor_prices", icon: "🏷️", label: "Prices" },
+        { id: "vendor_sales",     icon: "💰", label: "Sales"     },
+        { id: "vendor_prices",    icon: "🏷️", label: "Prices"   },
       ].map((item) => (
         <button key={item.id} onClick={() => nav(item.id)} className={current === item.id ? "active" : ""}>
           <span style={{ fontSize: 20 }}>{item.icon}</span>
@@ -1238,37 +1166,36 @@ function VendorNav({ current, nav, logout }) {
   );
 }
 
-function VendorQueuePage({ nav, toast, activePage }) {
+function VendorQueuePage({ nav, toast }) {
   const queue = useVendorQueue();
-  const prevLen = useRef(0);
+  // FIX #6: Track the previous set of order IDs (not just the length) so we can
+  // identify *which* order is actually new and alert on it specifically.
+  const prevIds = useRef(new Set());
   const isFirstLoad = useRef(true);
 
-  // Request notification permission when vendor opens queue page
-  useEffect(() => {
-    requestNotificationPermission();
-  }, []);
+  useEffect(() => { requestNotificationPermission(); }, []);
 
   useEffect(() => {
-    // Skip on first load so we don't ring for existing orders
     if (isFirstLoad.current) {
-      prevLen.current = queue.length;
+      // Seed the known-IDs set on first snapshot so existing orders don't trigger alerts.
+      prevIds.current = new Set(queue.map((o) => o.id));
       isFirstLoad.current = false;
       return;
     }
-    if (queue.length > prevLen.current) {
-      const newOrder = queue[queue.length - 1];
+
+    const currentIds = new Set(queue.map((o) => o.id));
+    // Find every ID that wasn't in the previous snapshot.
+    const newOrders = queue.filter((o) => !prevIds.current.has(o.id));
+
+    newOrders.forEach((newOrder) => {
       const customerName = newOrder?.customer_name || "A customer";
-      // Ring the alarm loudly
       ringAlarm();
-      // Show push notification (works even if phone screen is off)
-      sendPushNotification(
-        "🍜 New Order!",
-        `${customerName} just placed an order — tap to view`,
-      );
+      sendPushNotification("🍜 New Order!", `${customerName} just placed an order — tap to view`);
       toast(`New order from ${customerName}!`, "🔔");
-    }
-    prevLen.current = queue.length;
-  }, [queue.length, queue, toast]);
+    });
+
+    prevIds.current = currentIds;
+  }, [queue, toast]);
 
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
@@ -1306,7 +1233,7 @@ function VendorQueuePage({ nav, toast, activePage }) {
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 14px" }}>
                     {[
-                      ["🍜", MENU.find((m) => m.id === order.noodle_type)?.name || order.noodle_name],
+                      ["🍜", order.noodle_name],
                       ["🔢", `× ${order.quantity}`],
                       ["🥚", EGGS.find((e) => e.id === order.egg_option)?.label || order.egg_option],
                       ...(order.spice_level ? [[SPICES.find(s => s.id === order.spice_level)?.emoji || "🌶️", SPICES.find(s => s.id === order.spice_level)?.label || order.spice_level]] : []),
@@ -1331,8 +1258,10 @@ function VendorQueuePage({ nav, toast, activePage }) {
   );
 }
 
-function VendorDashboardPage({ nav, toast }) {
+function VendorDashboardPage({ nav }) {
   const queue = useVendorQueue();
+  // FIX #9: use the hook return value (reactive state) everywhere — no global reads.
+  const liveMenu = useMenuItems();
   const allOrders = useAllOrders();
   const today = allOrders.filter((o) => {
     if (!o.payment_time) return false;
@@ -1343,9 +1272,9 @@ function VendorDashboardPage({ nav, toast }) {
   const todaySales = today.reduce((s, o) => s + (o.total_price || 0), 0);
 
   const stats = [
-    { label: "Active Queue", value: queue.length, icon: "📋", color: "#2563eb" },
-    { label: "Orders Today", value: today.length, icon: "📦", color: "var(--fire)" },
-    { label: "Sales Today", value: fmt(todaySales), icon: "💰", color: "#059669" },
+    { label: "Active Queue",    value: queue.length,     icon: "📋", color: "#2563eb" },
+    { label: "Orders Today",    value: today.length,     icon: "📦", color: "var(--fire)" },
+    { label: "Sales Today",     value: fmt(todaySales),  icon: "💰", color: "#059669" },
     { label: "All-time Orders", value: allOrders.length, icon: "📊", color: "#7c3aed" },
   ];
 
@@ -1353,10 +1282,7 @@ function VendorDashboardPage({ nav, toast }) {
     <div className="page" style={{ background: "var(--cream)" }}>
       <div className="topbar">
         <div className="topbar-inner" style={{ maxWidth: 900 }}>
-          <div>
-            <h1>Dashboard</h1>
-            <div className="sub">Joy's Kitchen Overview</div>
-          </div>
+          <div><h1>Dashboard</h1><div className="sub">Joy's Kitchen Overview</div></div>
         </div>
       </div>
 
@@ -1371,7 +1297,6 @@ function VendorDashboardPage({ nav, toast }) {
           ))}
         </div>
 
-        {/* Queue preview */}
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Active Queue</p>
@@ -1383,7 +1308,8 @@ function VendorDashboardPage({ nav, toast }) {
               <span style={{ fontFamily: "var(--font-h)", fontSize: 22, fontWeight: 800, color: "var(--fire)", minWidth: 30 }}>#{i + 1}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{o.customer_name}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{MENU.find((m) => m.id === o.noodle_type)?.name} · {fmtTime(o.payment_time)}</div>
+                {/* FIX #9: resolve name from reactive liveMenu state, not global MENU */}
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{liveMenu.find((m) => m.id === o.noodle_type)?.name || o.noodle_name} · {fmtTime(o.payment_time)}</div>
               </div>
               <StatusBadge status={o.order_status} />
             </div>
@@ -1411,9 +1337,9 @@ function VendorOrderPage({ nav, orderId, toast }) {
   };
 
   const nextStatuses = {
-    paid: [{ s: "preparing", label: "Start Preparing 🍳", color: "#7c3aed" }],
-    preparing: [{ s: "ready", label: "Mark as Ready 🎉", color: "#059669" }],
-    ready: [{ s: "completed", label: "Complete Order ✅", color: "#6b7280" }],
+    paid:      [{ s: "preparing", label: "Start Preparing 🍳", color: "#7c3aed" }],
+    preparing: [{ s: "ready",     label: "Mark as Ready 🎉",   color: "#059669" }],
+    ready:     [{ s: "completed", label: "Complete Order ✅",  color: "#6b7280" }],
   };
 
   return (
@@ -1429,7 +1355,6 @@ function VendorOrderPage({ nav, orderId, toast }) {
       </div>
 
       <div className="wrap-wide" style={{ paddingTop: 20, paddingBottom: 100 }}>
-        {/* Status + action */}
         <div className="card fade-up" style={{ padding: 20, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <StatusBadge status={order.order_status} large />
@@ -1451,7 +1376,6 @@ function VendorOrderPage({ nav, orderId, toast }) {
           )}
         </div>
 
-        {/* Tabs */}
         <div style={{ display: "flex", gap: 6, marginBottom: 16, background: "var(--warm)", borderRadius: 12, padding: 4 }}>
           {["details", "messages"].map((t) => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer", background: tab === t ? "#fff" : "transparent", color: tab === t ? "var(--fire)" : "var(--muted)", fontWeight: 700, fontSize: 12, textTransform: "capitalize", fontFamily: "var(--font-b)", transition: "all 0.15s" }}>
@@ -1464,7 +1388,7 @@ function VendorOrderPage({ nav, orderId, toast }) {
           <div className="card" style={{ padding: 20 }}>
             <div className="row"><span className="lbl">Customer</span><span className="val">{order.customer_name}</span></div>
             {order.customer_phone && <div className="row"><span className="lbl">Phone</span><span className="val">{order.customer_phone}</span></div>}
-            <div className="row"><span className="lbl">Noodle</span><span className="val">{MENU.find((m) => m.id === order.noodle_type)?.name || order.noodle_name}</span></div>
+            <div className="row"><span className="lbl">Noodle</span><span className="val">{order.noodle_name}</span></div>
             <div className="row"><span className="lbl">Qty</span><span className="val">× {order.quantity}</span></div>
             {order.spice_level && <div className="row"><span className="lbl">Spice</span><span className="val">{SPICES.find((s) => s.id === order.spice_level)?.emoji} {SPICES.find((s) => s.id === order.spice_level)?.label}</span></div>}
             <div className="row"><span className="lbl">Egg</span><span className="val">{EGGS.find((e) => e.id === order.egg_option)?.label}</span></div>
@@ -1491,32 +1415,25 @@ function VendorPricesPage({ nav, toast }) {
   const menu = useMenuItems();
   const addons = useAddonItems();
   const [activeTab, setActiveTab] = useState("menu");
-
-  // ── Noodle edits: kept as plain objects with string price for input control ──
   const [editMenu, setEditMenu] = useState([]);
   const [menuDirty, setMenuDirty] = useState(false);
   const [savingMenu, setSavingMenu] = useState(false);
-
-  // ── Addon edits ──
   const [editAddons, setEditAddons] = useState([]);
   const [addonDirty, setAddonDirty] = useState(false);
   const [savingAddons, setSavingAddons] = useState(false);
 
-  // Seed editMenu whenever Firestore pushes a fresh menu (and vendor hasn't started editing)
   useEffect(() => {
     if (!menuDirty && menu.length > 0) {
       setEditMenu(menu.map(i => ({ ...i, priceRaw: String(i.price ?? "") })));
     }
   }, [menu, menuDirty]);
 
-  // Seed editAddons whenever Firestore pushes fresh addons (and vendor hasn't started editing)
   useEffect(() => {
     if (!addonDirty && addons.length > 0) {
       setEditAddons(addons.map(i => ({ ...i })));
     }
   }, [addons, addonDirty]);
 
-  // ── Save noodles only ──
   const saveMenu = async () => {
     setSavingMenu(true);
     try {
@@ -1528,50 +1445,30 @@ function VendorPricesPage({ nav, toast }) {
       setMenuDirty(false);
       toast("Noodle menu saved ✅", "🍜");
     } catch (err) {
-      console.error("[saveMenu]", err);
       toast(`Save failed: ${err?.message || err?.code || "Unknown error"}`, "❌");
     }
     setSavingMenu(false);
   };
 
-  // ── Save add-ons only ──
   const saveAddons = async () => {
     setSavingAddons(true);
     try {
-      // Strip price entirely — add-ons are always free
       const clean = editAddons.map(({ id, label }) => ({ id, label }));
       await saveAddonItems(clean);
       setAddonDirty(false);
       toast("Add-ons saved ✅", "🌶️");
     } catch (err) {
-      console.error("[saveAddons]", err);
       toast(`Save failed: ${err?.message || err?.code || "Unknown error"}`, "❌");
     }
     setSavingAddons(false);
   };
 
-  const updateMenuName = (id, val) => {
-    setMenuDirty(true);
-    setEditMenu(p => p.map(i => i.id === id ? { ...i, name: val } : i));
-  };
-  const updateMenuPrice = (id, val) => {
-    setMenuDirty(true);
-    setEditMenu(p => p.map(i => i.id === id ? { ...i, priceRaw: val } : i));
-  };
-  const updateAddonName = (id, val) => {
-    setAddonDirty(true);
-    setEditAddons(p => p.map(i => i.id === id ? { ...i, label: val } : i));
-  };
+  const updateMenuName  = (id, val) => { setMenuDirty(true);  setEditMenu(p => p.map(i => i.id === id ? { ...i, name: val } : i)); };
+  const updateMenuPrice = (id, val) => { setMenuDirty(true);  setEditMenu(p => p.map(i => i.id === id ? { ...i, priceRaw: val } : i)); };
+  const updateAddonName = (id, val) => { setAddonDirty(true); setEditAddons(p => p.map(i => i.id === id ? { ...i, label: val } : i)); };
 
-  const inputStyle = {
-    padding: "10px 12px", borderRadius: 9, fontSize: 14, fontWeight: 600,
-    border: "2px solid var(--border)", color: "var(--ink)",
-    fontFamily: "var(--font-b)", outline: "none", background: "#fff", width: "100%",
-  };
-  const priceInputStyle = {
-    ...inputStyle, width: 110, fontFamily: "var(--font-h)", fontSize: 15,
-    fontWeight: 800, color: "var(--fire)", textAlign: "right",
-  };
+  const inputStyle = { padding: "10px 12px", borderRadius: 9, fontSize: 14, fontWeight: 600, border: "2px solid var(--border)", color: "var(--ink)", fontFamily: "var(--font-b)", outline: "none", background: "#fff", width: "100%" };
+  const priceInputStyle = { ...inputStyle, width: 110, fontFamily: "var(--font-h)", fontSize: 15, fontWeight: 800, color: "var(--fire)", textAlign: "right" };
 
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
@@ -1582,103 +1479,55 @@ function VendorPricesPage({ nav, toast }) {
       </div>
 
       <div className="wrap-wide" style={{ paddingTop: 20, paddingBottom: 100 }}>
-
-        {/* Tab switcher */}
         <div style={{ display: "flex", gap: 6, marginBottom: 20, background: "var(--warm)", borderRadius: 12, padding: 4 }}>
           {[["menu", "🍜 Noodles"], ["addons", "🌶️ Add-ons"]].map(([id, label]) => (
-            <button key={id} onClick={() => setActiveTab(id)} style={{
-              flex: 1, padding: "11px 0", borderRadius: 10, border: "none", cursor: "pointer",
-              background: activeTab === id ? "#fff" : "transparent",
-              color: activeTab === id ? "var(--fire)" : "var(--muted)",
-              fontWeight: 700, fontSize: 13, fontFamily: "var(--font-b)",
-              boxShadow: activeTab === id ? "0 1px 6px rgba(0,0,0,0.08)" : "none",
-              transition: "all 0.15s",
-            }}>{label}</button>
+            <button key={id} onClick={() => setActiveTab(id)} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: "none", cursor: "pointer", background: activeTab === id ? "#fff" : "transparent", color: activeTab === id ? "var(--fire)" : "var(--muted)", fontWeight: 700, fontSize: 13, fontFamily: "var(--font-b)", boxShadow: activeTab === id ? "0 1px 6px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s" }}>{label}</button>
           ))}
         </div>
 
-        {/* ── Noodles tab ── */}
         {activeTab === "menu" && (
           <div className="card" style={{ padding: "20px 16px", marginBottom: 16 }}>
-            {/* column headers */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10, marginBottom: 12, padding: "0 2px" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Item Name</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "right" }}>Price (₦)</span>
             </div>
-
             {editMenu.map((item) => (
               <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10, marginBottom: 10, alignItems: "center" }}>
-                <input
-                  style={inputStyle}
-                  type="text"
-                  value={item.name ?? ""}
-                  onChange={(e) => updateMenuName(item.id, e.target.value)}
-                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
-                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
-                />
-                <input
-                  style={priceInputStyle}
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  value={item.priceRaw ?? ""}
-                  onChange={(e) => updateMenuPrice(item.id, e.target.value)}
-                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
-                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
-                />
+                <input style={inputStyle} type="text" value={item.name ?? ""} onChange={(e) => updateMenuName(item.id, e.target.value)} onFocus={(e) => e.target.style.borderColor = "var(--fire)"} onBlur={(e) => e.target.style.borderColor = "var(--border)"} />
+                <input style={priceInputStyle} type="number" min="0" placeholder="0" value={item.priceRaw ?? ""} onChange={(e) => updateMenuPrice(item.id, e.target.value)} onFocus={(e) => e.target.style.borderColor = "var(--fire)"} onBlur={(e) => e.target.style.borderColor = "var(--border)"} />
               </div>
             ))}
-
-            <button
-              className="btn btn-fire btn-full"
-              onClick={saveMenu}
-              disabled={savingMenu || !menuDirty}
-              style={{ marginTop: 14, padding: 14, fontSize: 15 }}
-            >
+            <button className="btn btn-fire btn-full" onClick={saveMenu} disabled={savingMenu || !menuDirty} style={{ marginTop: 14, padding: 14, fontSize: 15 }}>
               {savingMenu ? "Saving…" : menuDirty ? "💾 Save Noodle Menu" : "✅ All Changes Saved"}
             </button>
           </div>
         )}
 
-        {/* ── Add-ons tab — names only, no price column ── */}
         {activeTab === "addons" && (
           <div className="card" style={{ padding: "20px 16px", marginBottom: 16 }}>
             <div style={{ background: "rgba(245,166,35,0.1)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#92610a" }}>
               ℹ️ Add-ons are <strong>free</strong> — edit names only.
             </div>
             <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 12 }}>Item Name</span>
-
             {editAddons.map((item) => (
               <div key={item.id} style={{ marginBottom: 10 }}>
-                <input
-                  style={inputStyle}
-                  type="text"
-                  value={item.label ?? ""}
-                  onChange={(e) => updateAddonName(item.id, e.target.value)}
-                  onFocus={(e) => e.target.style.borderColor = "var(--fire)"}
-                  onBlur={(e) => e.target.style.borderColor = "var(--border)"}
-                />
+                <input style={inputStyle} type="text" value={item.label ?? ""} onChange={(e) => updateAddonName(item.id, e.target.value)} onFocus={(e) => e.target.style.borderColor = "var(--fire)"} onBlur={(e) => e.target.style.borderColor = "var(--border)"} />
               </div>
             ))}
-
-            <button
-              className="btn btn-fire btn-full"
-              onClick={saveAddons}
-              disabled={savingAddons || !addonDirty}
-              style={{ marginTop: 14, padding: 14, fontSize: 15 }}
-            >
+            <button className="btn btn-fire btn-full" onClick={saveAddons} disabled={savingAddons || !addonDirty} style={{ marginTop: 14, padding: 14, fontSize: 15 }}>
               {savingAddons ? "Saving…" : addonDirty ? "💾 Save Add-ons" : "✅ All Changes Saved"}
             </button>
           </div>
         )}
-
       </div>
       <VendorNav current="vendor_prices" nav={nav} logout={() => { signOut(auth); sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
     </div>
   );
 }
 
-function VendorSalesPage({ nav, toast }) {
+function VendorSalesPage({ nav }) {
+  // FIX #9: use reactive liveMenu state everywhere instead of global MENU variable.
+  const liveMenu = useMenuItems();
   const allOrders = useAllOrders();
   const paid = allOrders.filter((o) => o.payment_status === "paid");
   const today = new Date();
@@ -1702,7 +1551,7 @@ function VendorSalesPage({ nav, toast }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
           {[
             { label: "Today's Revenue", value: fmt(totalToday), sub: `${todayOrders.length} orders`, icon: "📅", bg: "#d1fae5", color: "#059669" },
-            { label: "All-time Revenue", value: fmt(totalAll), sub: `${paid.length} orders`, icon: "💰", bg: "#dbeafe", color: "#2563eb" },
+            { label: "All-time Revenue", value: fmt(totalAll),  sub: `${paid.length} orders`,        icon: "💰", bg: "#dbeafe", color: "#2563eb" },
           ].map((s) => (
             <div key={s.label} className="fade-up" style={{ background: s.bg, borderRadius: 16, padding: "18px 16px", border: `1.5px solid ${s.color}30` }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>{s.icon}</div>
@@ -1723,8 +1572,9 @@ function VendorSalesPage({ nav, toast }) {
                   <span style={{ fontWeight: 700, fontSize: 14 }}>{o.customer_name}</span>
                   <StatusBadge status={o.order_status} />
                 </div>
+                {/* FIX #9: use liveMenu state, not global MENU */}
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                  {MENU.find((m) => m.id === o.noodle_type)?.name} · {fmtTime(o.payment_time || o.created_at)}
+                  {liveMenu.find((m) => m.id === o.noodle_type)?.name || o.noodle_name} · {fmtTime(o.payment_time || o.created_at)}
                 </div>
               </div>
               <span style={{ fontFamily: "var(--font-h)", fontWeight: 800, color: o.payment_status === "paid" ? "var(--fire)" : "var(--muted)" }}>
@@ -1740,7 +1590,7 @@ function VendorSalesPage({ nav, toast }) {
   );
 }
 
-// ─── CUSTOMER BOTTOM NAV (outside App to avoid remount on every render) ───────
+// ─── CUSTOMER BOTTOM NAV ──────────────────────────────────────────────────────
 function CustomerBottomNav({ page, nav, savedOrderId }) {
   return (
     <nav className="bottom-nav">
@@ -1766,7 +1616,6 @@ export default function App() {
   const { show: toast, ToastContainer } = useToast();
 
   const nav = useCallback((target, p = {}) => {
-    // Guard vendor pages (but not the login page itself)
     if (target.startsWith("vendor_") && target !== "vendor_login") {
       if (!sessionStorage.getItem("vendor_auth")) { setPage("home"); return; }
     }
@@ -1775,7 +1624,6 @@ export default function App() {
   }, []);
 
   const savedOrderId = localStorage.getItem("last_order_id");
-
   const pageProps = { nav, toast, orderId: params.orderId, noodleId: params.noodleId };
 
   return (
@@ -1783,18 +1631,18 @@ export default function App() {
       <style>{STYLES}</style>
       <ToastContainer />
 
-      {page === "home"            && <HomePage {...pageProps} />}
-      {page === "vendor_login"    && <VendorLogin {...pageProps} />}
-      {page === "menu"            && <><MenuPage {...pageProps} /><CustomerBottomNav page={page} nav={nav} savedOrderId={savedOrderId} /></>}
-      {page === "customize"       && <CustomizePage {...pageProps} />}
-      {page === "payment"         && <PaymentPage {...pageProps} />}
-      {page === "order"           && <OrderStatusPage {...pageProps} />}
+      {page === "home"             && <HomePage {...pageProps} />}
+      {page === "vendor_login"     && <VendorLogin {...pageProps} />}
+      {page === "menu"             && <><MenuPage {...pageProps} /><CustomerBottomNav page={page} nav={nav} savedOrderId={savedOrderId} /></>}
+      {page === "customize"        && <CustomizePage {...pageProps} />}
+      {page === "payment"          && <PaymentPage {...pageProps} />}
+      {page === "order"            && <OrderStatusPage {...pageProps} />}
 
-      {page === "vendor_queue"    && <VendorQueuePage {...pageProps} activePage={page} />}
-      {page === "vendor_dashboard"&& <VendorDashboardPage {...pageProps} />}
-      {page === "vendor_order"    && <VendorOrderPage {...pageProps} />}
-      {page === "vendor_sales"    && <VendorSalesPage {...pageProps} />}
-      {page === "vendor_prices"   && <VendorPricesPage {...pageProps} />}
+      {page === "vendor_queue"     && <VendorQueuePage {...pageProps} />}
+      {page === "vendor_dashboard" && <VendorDashboardPage {...pageProps} />}
+      {page === "vendor_order"     && <VendorOrderPage {...pageProps} />}
+      {page === "vendor_sales"     && <VendorSalesPage {...pageProps} />}
+      {page === "vendor_prices"    && <VendorPricesPage {...pageProps} />}
     </>
   );
 }
