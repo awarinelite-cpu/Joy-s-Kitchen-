@@ -8,6 +8,7 @@ import {
   getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, updateProfile
 } from "firebase/auth";
+
 // ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -205,15 +206,22 @@ const useAddonItems = () => {
   useEffect(() => {
     return onSnapshot(doc(db, "settings", "addons"), (s) => {
       if (s.exists() && s.data().items) {
-        setAddons(s.data().items);
+        // Strip any stale `price` field saved previously — add-ons are always free.
+        const clean = s.data().items.map(({ id, label }) => ({ id, label }));
+        setAddons(clean);
       }
     });
   }, []);
   return addons;
 };
 
+// Always save only id + label — never persist a price on add-ons.
 const saveAddonItems = (items) =>
-  setDoc(doc(db, "settings", "addons"), { items }, { merge: true });
+  setDoc(
+    doc(db, "settings", "addons"),
+    { items: items.map(({ id, label }) => ({ id, label })) },
+    { merge: true }
+  );
 
 // ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
 const STYLES = `
