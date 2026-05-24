@@ -31,7 +31,6 @@ export default defineConfig({
       },
       workbox: {
         runtimeCaching: [
-          // Google Fonts — cache first
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: "CacheFirst",
@@ -50,7 +49,6 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          // Firebase JS SDK — stale while revalidate
           {
             urlPattern: /^https:\/\/www\.gstatic\.com\/firebasejs\/.*/i,
             handler: "StaleWhileRevalidate",
@@ -59,7 +57,6 @@ export default defineConfig({
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },
           },
-          // App images — cache first
           {
             urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/i,
             handler: "CacheFirst",
@@ -76,19 +73,13 @@ export default defineConfig({
       },
     }),
   ],
-
   build: {
-    // Silence the warning — 600 kB is acceptable for a Firebase + React app.
-    // The actual splits below bring each chunk well under this limit.
+    target: "esnext",          // ← only change: fixes top-level await error
     chunkSizeWarningLimit: 600,
-
     rollupOptions: {
       output: {
         manualChunks: {
-          // React core — changes least often, cached longest
-          "vendor-react": ["react", "react-dom"],
-
-          // Firebase split into sub-packages so only what's needed loads
+          "vendor-react":              ["react", "react-dom"],
           "vendor-firebase-app":       ["firebase/app"],
           "vendor-firebase-firestore": ["firebase/firestore"],
           "vendor-firebase-auth":      ["firebase/auth"],
