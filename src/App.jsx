@@ -1,3 +1,13 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore, collection, addDoc, updateDoc, setDoc, doc, onSnapshot,
+  query, where, orderBy, serverTimestamp
+} from "firebase/firestore";
+import {
+  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  sendPasswordResetEmail, signOut, updateProfile
+} from "firebase/auth";
 
 // ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
 const firebaseConfig = {
