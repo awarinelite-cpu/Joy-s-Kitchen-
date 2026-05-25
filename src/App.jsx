@@ -845,7 +845,7 @@ function PaymentPage({ nav, orderId, toast }) {
     { id: "ussd",     icon: "💳", name: "USSD / Card",   fields: [{ k: "GTB USSD", v: "*737*2*Amount*0812345678#" }, { k: "Zenith", v: "*966*2*Amount*0812345678#" }] },
   ];
 
-  if (!order) return <div className="spinner" />;
+  if (!order) return (   <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center" }}>     <div className="spinner" />   </div> );
 
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
@@ -920,6 +920,7 @@ function OrderStatusPage({ nav, orderId, toast }) {
 
   useEffect(() => {
     if (!order) return;
+    // Keep screen alive — don't auto-redirect on any status change
     if (prevStatus.current && prevStatus.current !== order.order_status) {
       const messages = {
         preparing: { title: "🍳 Order Being Prepared!", body: "Joy's Kitchen is cooking your noodles!" },
@@ -936,7 +937,7 @@ function OrderStatusPage({ nav, orderId, toast }) {
     prevStatus.current = order.order_status;
   }, [order?.order_status, toast]);
 
-  if (!order) return <div className="spinner" />;
+  if (!order) return (   <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center" }}>     <div className="spinner" />   </div> );
 
   const steps = [
     { key: "paid",      label: "Order Paid",      sub: "Payment confirmed" },
@@ -1334,7 +1335,7 @@ function VendorOrderPage({ nav, orderId, toast }) {
   const [updating, setUpdating] = useState(false);
   const [tab, setTab] = useState("details");
 
-  if (!order) return <div className="spinner" />;
+  if (!order) return (   <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center" }}>     <div className="spinner" />   </div> );
 
   const changeStatus = async (status) => {
     setUpdating(true);
