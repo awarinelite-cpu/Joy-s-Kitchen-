@@ -929,7 +929,7 @@ function OrderStatusPage({ nav, orderId, toast }) {
       };
       const msg = messages[order.order_status];
       if (msg) {
-        sendPushNotification(msg.title, msg.body);
+        if (msg) {   sendPushNotification(msg.title, msg.body);   toast(msg.title, "🍜");   // Only ring alarm for preparing/ready, not completed/cancelled   if (["preparing", "ready"].includes(order.order_status)) {     try { ringAlarm(); } catch(e) {}   } }
         ringAlarm();
         toast(msg.title, "🍜");
       }
@@ -939,13 +939,30 @@ function OrderStatusPage({ nav, orderId, toast }) {
 
   if (!order) return (   <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center" }}>     <div className="spinner" />   </div> );
 
-  const steps = [
+  if (order.order_status === "completed") return (
+  <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
+    <div style={{ fontSize: 80, marginBottom: 16 }}>✅</div>
+    <h2 style={{ fontFamily: "var(--font-h)", fontSize: 28, fontWeight: 800, color: "var(--ink)", marginBottom: 8 }}>Order Complete!</h2>
+    <p style={{ color: "var(--muted)", fontSize: 15, marginBottom: 32 }}>Thanks for ordering from Joy's Kitchen 🍜</p>
+    <button className="btn btn-fire" onClick={() => nav("menu")} style={{ padding: "14px 32px", fontSize: 15 }}>Order Again →</button>
+  </div>
+);
+
+if (order.order_status === "cancelled") return (
+  <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
+    <div style={{ fontSize: 80, marginBottom: 16 }}>❌</div>
+    <h2 style={{ fontFamily: "var(--font-h)", fontSize: 28, fontWeight: 800, color: "var(--ink)", marginBottom: 8 }}>Order Cancelled</h2>
+    <p style={{ color: "var(--muted)", fontSize: 15, marginBottom: 32 }}>Your order was cancelled. Please contact Joy's Kitchen.</p>
+    <button className="btn btn-fire" onClick={() => nav("menu")} style={{ padding: "14px 32px", fontSize: 15 }}>Back to Menu →</button>
+  </div>
+);
+
+const steps = [
     { key: "paid",      label: "Order Paid",      sub: "Payment confirmed" },
     { key: "preparing", label: "Being Prepared",   sub: "Chef is cooking your noodles" },
     { key: "ready",     label: "Ready for Pickup", sub: "Come collect your order" },
     { key: "completed", label: "Order Completed",  sub: "Enjoy your meal! 😊" },
-  ];
-
+];
   const statusOrder = ["paid", "preparing", "ready", "completed"];
   const currentIdx = statusOrder.indexOf(order.order_status);
 
