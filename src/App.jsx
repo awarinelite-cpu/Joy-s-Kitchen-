@@ -1678,7 +1678,7 @@ export default function App() {
       {page === "menu"             && <><MenuPage {...pageProps} /><CustomerBottomNav page={page} nav={nav} savedOrderId={savedOrderId} /></>}
       {page === "customize"        && <CustomizePage {...pageProps} />}
       {page === "payment"          && <PaymentPage {...pageProps} />}
-      {page === "order"            && <OrderStatusPage {...pageProps} />}
+      {page === "order" && <><OrderStatusPage {...pageProps} /><CustomerBottomNav page={page} nav={nav} savedOrderId={savedOrderId} /></>}
 
       {page === "vendor_queue"     && <VendorQueuePage {...pageProps} />}
       {page === "vendor_dashboard" && <VendorDashboardPage {...pageProps} />}
