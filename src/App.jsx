@@ -929,11 +929,12 @@ function OrderStatusPage({ nav, orderId, toast }) {
       };
       const msg = messages[order.order_status];
       if (msg) {
-        if (msg) {   sendPushNotification(msg.title, msg.body);   toast(msg.title, "🍜");   // Only ring alarm for preparing/ready, not completed/cancelled   if (["preparing", "ready"].includes(order.order_status)) {     try { ringAlarm(); } catch(e) {}   } }
-        ringAlarm();
-        toast(msg.title, "🍜");
-      }
-    }
+  sendPushNotification(msg.title, msg.body);
+  toast(msg.title, "🍜");
+  if (["preparing", "ready"].includes(order.order_status)) {
+    try { ringAlarm(); } catch(e) {}
+  }
+}
     prevStatus.current = order.order_status;
   }, [order?.order_status, toast]);
 
