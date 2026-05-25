@@ -920,7 +920,6 @@ function OrderStatusPage({ nav, orderId, toast }) {
 
   useEffect(() => {
     if (!order) return;
-    // Keep screen alive — don't auto-redirect on any status change
     if (prevStatus.current && prevStatus.current !== order.order_status) {
       const messages = {
         preparing: { title: "🍳 Order Being Prepared!", body: "Joy's Kitchen is cooking your noodles!" },
@@ -929,12 +928,13 @@ function OrderStatusPage({ nav, orderId, toast }) {
       };
       const msg = messages[order.order_status];
       if (msg) {
-  sendPushNotification(msg.title, msg.body);
-  toast(msg.title, "🍜");
-  if (["preparing", "ready"].includes(order.order_status)) {
-    try { ringAlarm(); } catch(e) {}
-  }
-}
+        sendPushNotification(msg.title, msg.body);
+        toast(msg.title, "🍜");
+        if (["preparing", "ready"].includes(order.order_status)) {
+          try { ringAlarm(); } catch(e) {}
+        }
+      }
+    }
     prevStatus.current = order.order_status;
   }, [order?.order_status, toast]);
 
