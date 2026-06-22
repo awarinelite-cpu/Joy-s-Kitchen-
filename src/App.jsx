@@ -32,16 +32,28 @@ const NOODLE_BG = "/NOODLES_images.jpg";
 
 // ─── NOTIFICATIONS & SOUND ───────────────────────────────────────────────────
 const requestNotificationPermission = async () => {
-  if (!("Notification" in window)) return false;
-  if (Notification.permission === "granted") return true;
-  const result = await Notification.requestPermission();
-  return result === "granted";
+  try {
+    if (!("Notification" in window)) return false;
+    if (Notification.permission === "granted") return true;
+    const result = await Notification.requestPermission();
+    return result === "granted";
+  } catch (e) {
+    console.warn("Notification permission request failed:", e);
+    return false;
+  }
 };
 
 const sendPushNotification = (title, body, icon = "/NOODLES_images.jpg") => {
-  if (Notification.permission === "granted") {
-    const n = new Notification(title, { body, icon, badge: "/NOODLES_images.jpg", vibrate: [200, 100, 200] });
-    setTimeout(() => n.close(), 6000);
+  try {
+    if (Notification.permission === "granted") {
+      const n = new Notification(title, { body, icon, badge: "/NOODLES_images.jpg", vibrate: [200, 100, 200] });
+      setTimeout(() => n.close(), 6000);
+    }
+  } catch (e) {
+    // Notification constructor can throw in some mobile/WebView/PWA contexts
+    // (e.g. Android in-app browsers). Never let this crash the page — the
+    // in-app toast + sound alarm already cover the same alert.
+    console.warn("Push notification not available:", e);
   }
 };
 
