@@ -58,9 +58,23 @@ service cloud.firestore {
                     ||
                     (
                       isOrderOwner(orderId)
-                      // Customer may only touch these fields
-                      && request.resource.data.diff(resource.data).affectedKeys()
-                           .hasOnly(["note", "add_ons", "spice_level", "egg_option"])
+                      &&
+                      (
+                        // Existing path: customer may tweak these fields pre-fulfillment.
+                        request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(["note", "add_ons", "spice_level", "egg_option"])
+                        ||
+                        // New path: a ONE-TIME 1–5 star rating, only after the order is
+                        // marked completed, and only if it hasn't been rated already.
+                        (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rating"])
+                          && resource.data.order_status == "completed"
+                          && !("rating" in resource.data)
+                          && request.resource.data.rating is number
+                          && request.resource.data.rating >= 1
+                          && request.resource.data.rating <= 5
+                        )
+                      )
                     );
 
       // ── Messages subcollection ──────────────────────────────────────────

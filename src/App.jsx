@@ -106,6 +106,13 @@ const EGGS = [
   { id: "none",   label: "No Egg",     emoji: "❌", extra: 0   },
 ];
 
+const PICKUP_OPTIONS = [
+  { id: "asap", label: "As soon as possible", minutes: 0 },
+  { id: "30",   label: "In 30 minutes",       minutes: 30 },
+  { id: "60",   label: "In 1 hour",           minutes: 60 },
+  { id: "120",  label: "In 2 hours",          minutes: 120 },
+];
+
 const STATUS_INFO = {
   pending:   { label: "Awaiting Payment",     color: "#d97706", bg: "#fef3c7", icon: "⏳" },
   paid:      { label: "In Queue",             color: "#2563eb", bg: "#dbeafe", icon: "🔵" },
@@ -116,6 +123,19 @@ const STATUS_INFO = {
 };
 
 const fmt = (n) => `₦${Number(n).toLocaleString()}`;
+
+// Haptic feedback on key actions (add to cart, payment success, rating, etc).
+// navigator.vibrate is unsupported on iOS Safari and some browsers — this is
+// a pure enhancement, never something a flow should depend on, so it's a
+// safe no-op everywhere it isn't available.
+const haptic = (pattern = 15) => {
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(pattern);
+  } catch {
+    // ignore — never let haptics break a real action
+  }
+};
+
 const fmtTime = (ts) => {
   if (!ts) return "—";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -176,6 +196,80 @@ const useVendorQueue = () => {
     return onSnapshot(q, (s) => setQueue(s.docs.map((d) => ({ id: d.id, ...d.data() }))));
   }, []);
   return queue;
+};
+
+// Live, queue-aware ETA for a customer's own order. Reuses the exact same
+// query shape as useVendorQueue (same 3 fields, same order) so it hits the
+// existing composite index in firestore.indexes.json — no new index needed.
+// Heuristic: sum the per-bowl prep time (from the live menu) for every
+// active order at-or-ahead of this one in the paid queue. Simple, but it
+// genuinely reflects queue position and updates live as orders move.
+const useQueueETA = (order, liveMenu) => {
+  const [eta, setEta] = useState(null); // minutes, or null if not applicable
+  useEffect(() => {
+    if (!order || !["paid", "preparing"].includes(order.order_status)) { setEta(null); return; }
+    const q = query(
+      collection(db, "orders"),
+      where("payment_status", "==", "paid"),
+      where("order_status", "in", ["paid", "preparing", "ready"]),
+      orderBy("payment_time", "asc")
+    );
+    return onSnapshot(q, (s) => {
+      const active = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => o.order_status !== "ready");
+      const idx = active.findIndex((o) => o.id === order.id);
+      if (idx === -1) { setEta(null); return; }
+      const ahead = active.slice(0, idx + 1);
+      const totalMin = ahead.reduce((sum, o) => {
+        const item = liveMenu.find((m) => m.id === o.noodle_type);
+        return sum + (item?.time ?? 7) * (o.quantity || 1);
+      }, 0);
+      setEta(totalMin);
+    });
+  }, [order?.id, order?.order_status, liveMenu]);
+  return eta;
+};
+
+// Aggregate star ratings per menu item, computed from rated completed orders.
+// Single-field range query (rating >= 1) — covered by Firestore's automatic
+// single-field indexes, no firestore.indexes.json entry needed.
+const useMenuRatings = () => {
+  const [ratings, setRatings] = useState({}); // { [noodle_type]: { avg, count } }
+  useEffect(() => {
+    const q = query(collection(db, "orders"), where("rating", ">=", 1));
+    return onSnapshot(q, (s) => {
+      const sums = {};
+      s.docs.forEach((d) => {
+        const o = d.data();
+        if (!o.noodle_type || !o.rating) return;
+        if (!sums[o.noodle_type]) sums[o.noodle_type] = { sum: 0, count: 0 };
+        sums[o.noodle_type].sum += o.rating;
+        sums[o.noodle_type].count += 1;
+      });
+      const out = {};
+      Object.entries(sums).forEach(([k, v]) => { out[k] = { avg: v.sum / v.count, count: v.count }; });
+      setRatings(out);
+    });
+  }, []);
+  return ratings;
+};
+
+// A customer's own order history, most recent first. Relies on the existing
+// loose `allow read: if request.auth != null` rule (no rules change needed)
+// and filters by customer_uid client-side via a where() clause.
+const useMyOrders = (uid) => {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!uid) { setOrders([]); setLoading(false); return; }
+    const q = query(collection(db, "orders"), where("customer_uid", "==", uid));
+    return onSnapshot(q, (s) => {
+      const list = s.docs.map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.created_at?.toMillis?.() || 0) - (a.created_at?.toMillis?.() || 0));
+      setOrders(list);
+      setLoading(false);
+    });
+  }, [uid]);
+  return { orders, loading };
 };
 
 const useAllOrders = () => {
@@ -317,6 +411,9 @@ const STYLES = `
   .msg-bubble-them { background: #fff; color: var(--ink); border-radius: 16px 16px 16px 4px; border: 1px solid var(--border); }
 
   .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--fire); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 40px auto; }
+
+  .skeleton { background: linear-gradient(90deg, #ece5db 25%, #f7f1e8 37%, #ece5db 63%); background-size: 400% 100%; animation: skeleton-shimmer 1.4s ease infinite; }
+  @keyframes skeleton-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
 
   .notif { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: var(--dark); color: #fff; padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 600; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 8px; animation: pop 0.25s ease; border: 1px solid rgba(255,255,255,0.1); max-width: 90vw; }
 
@@ -632,8 +729,38 @@ function HomePage({ nav, toast }) {
   );
 }
 
-function MenuPage({ nav }) {
+function MenuPage({ nav, toast }) {
   const liveMenu = useMenuItems();
+  const ratings = useMenuRatings();
+  const user = auth.currentUser;
+  const { orders: myOrders } = useMyOrders(user?.uid);
+  const [reordering, setReordering] = useState(false);
+
+  const lastOrder = myOrders.find((o) => o.order_status === "completed");
+
+  const reorderLast = async () => {
+    if (!lastOrder || reordering) return;
+    setReordering(true);
+    haptic(15);
+    try {
+      const ref = await placeOrder({
+        customer_name: lastOrder.customer_name,
+        customer_email: lastOrder.customer_email || "",
+        customer_uid: user?.uid || "",
+        customer_phone: lastOrder.customer_phone || "",
+        noodle_type: lastOrder.noodle_type, noodle_name: lastOrder.noodle_name,
+        quantity: lastOrder.quantity, spice_level: lastOrder.spice_level, egg_option: lastOrder.egg_option,
+        add_ons: lastOrder.add_ons || [], unit_price: lastOrder.unit_price, total_price: lastOrder.total_price,
+        note: "",
+      });
+      localStorage.setItem("last_order_id", ref.id);
+      nav("payment", { orderId: ref.id });
+    } catch {
+      toast?.("Couldn't reorder. Try customising it instead.", "❌");
+      setReordering(false);
+    }
+  };
+
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
       <div className="topbar">
@@ -646,6 +773,23 @@ function MenuPage({ nav }) {
       </div>
 
       <div className="wrap" style={{ paddingTop: 20 }}>
+        {lastOrder && (
+          <div className="card fade-up" onClick={reorderLast} style={{
+            padding: 16, marginBottom: 16, cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
+            background: "linear-gradient(135deg, rgba(232,69,10,0.06), rgba(245,166,35,0.05))",
+            border: "1.5px solid rgba(232,69,10,0.25)",
+          }}>
+            <span style={{ fontSize: 26 }}>🔁</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontWeight: 800, fontSize: 13, color: "var(--ink)" }}>Reorder your last meal</p>
+              <p style={{ color: "var(--muted)", fontSize: 12, marginTop: 1 }}>
+                {lastOrder.quantity}× {lastOrder.noodle_name} · {fmt(lastOrder.total_price)}
+              </p>
+            </div>
+            <button className="btn btn-fire btn-sm" disabled={reordering}>{reordering ? "…" : "Reorder →"}</button>
+          </div>
+        )}
+
         <div style={{ background: "rgba(245,166,35,0.1)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 12, padding: "12px 16px", marginBottom: 24, display: "flex", gap: 10 }}>
           <span style={{ fontSize: 18 }}>⚡</span>
           <div>
@@ -655,7 +799,7 @@ function MenuPage({ nav }) {
         </div>
 
         {liveMenu.map((item, i) => (
-          <div key={item.id} onClick={() => nav("customize", { noodleId: item.id })}
+          <div key={item.id} onClick={() => { haptic(10); nav("customize", { noodleId: item.id }); }}
             className="card fade-up"
             style={{ padding: 20, marginBottom: 14, cursor: "pointer", animationDelay: `${i * 0.1}s`, transition: "all 0.2s" }}
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--fire)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
@@ -668,7 +812,10 @@ function MenuPage({ nav }) {
                   <h2 style={{ fontFamily: "var(--font-h)", fontSize: 20, fontWeight: 700 }}>{item.name}</h2>
                   <span className="badge" style={{ background: item.id === "medium" ? "var(--fire)" : "#f3f4f6", color: item.id === "medium" ? "#fff" : "#6b7280" }}>{item.tag}</span>
                 </div>
-                <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>~{item.time} min prep · {item.serves}</p>
+                <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
+                  ~{item.time} min prep · {item.serves}
+                  {ratings[item.id] && <> · ⭐ {ratings[item.id].avg.toFixed(1)} ({ratings[item.id].count})</>}
+                </p>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span style={{ fontFamily: "var(--font-h)", fontSize: 26, fontWeight: 800, color: "var(--fire)" }}>{fmt(item.price)}</span>
                   <button className="btn btn-fire btn-sm">Choose →</button>
@@ -691,6 +838,8 @@ function CustomizePage({ nav, noodleId, toast }) {
   const [egg, setEgg] = useState("none");
   const [addons, setAddons] = useState([]);
   const [note, setNote] = useState("");
+  const [phone, setPhone] = useState(() => localStorage.getItem("customer_phone") || "");
+  const [pickupOption, setPickupOption] = useState("asap");
   const [loading, setLoading] = useState(false);
 
   const user = auth.currentUser;
@@ -709,14 +858,20 @@ function CustomizePage({ nav, noodleId, toast }) {
 
   const proceed = async () => {
     setLoading(true);
+    haptic(15);
     try {
+      if (phone.trim()) localStorage.setItem("customer_phone", phone.trim());
+      const pickupMinutes = PICKUP_OPTIONS.find((p) => p.id === pickupOption)?.minutes || 0;
+      const pickup_time = pickupMinutes > 0 ? new Date(Date.now() + pickupMinutes * 60000).toISOString() : null;
       const ref = await placeOrder({
         customer_name: customerName,
         customer_email: customerEmail,
         customer_uid: user?.uid || "",
+        customer_phone: phone.trim(),
         noodle_type: noodle.id, noodle_name: noodle.name,
         quantity: qty, spice_level: spice, egg_option: egg,
         add_ons: addons, unit_price: unit, total_price: total, note: note.trim(),
+        pickup_time,
       });
       localStorage.setItem("last_order_id", ref.id);
       nav("payment", { orderId: ref.id });
@@ -793,6 +948,27 @@ function CustomizePage({ nav, noodleId, toast }) {
           ))}
         </div>
 
+        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>When do you want it?</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {PICKUP_OPTIONS.map((p) => (
+              <div key={p.id} className={`option-pill ${pickupOption === p.id ? "sel" : ""}`} onClick={() => { haptic(10); setPickupOption(p.id); }} style={{ flex: "1 1 auto", minWidth: 90 }}>
+                <div className="emoji">{p.id === "asap" ? "⚡" : "🕐"}</div>
+                <div className="name" style={{ fontSize: 11 }}>{p.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12 }}>
+            Phone Number <span style={{ textTransform: "none", fontWeight: 400, fontSize: 11 }}>(optional, helps the vendor reach you)</span>
+          </p>
+          <div className="field">
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. 0803 123 4567" />
+          </div>
+        </div>
+
         <div className="card" style={{ padding: 20 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12 }}>Special Note</p>
           <div className="field">
@@ -830,7 +1006,7 @@ function PaymentPage({ nav, orderId, toast }) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => { const t = setInterval(() => setElapsed((e) => e + 1), 1000); return () => clearInterval(t); }, []);
-  useEffect(() => { if (order?.payment_status === "paid") nav("order", { orderId }); }, [order, nav, orderId]);
+  useEffect(() => { if (order?.payment_status === "paid") { haptic([30, 50, 30]); nav("order", { orderId }); } }, [order, nav, orderId]);
 
   const copy = (val, lbl) => {
     navigator.clipboard.writeText(val).catch(() => {});
@@ -857,7 +1033,13 @@ function PaymentPage({ nav, orderId, toast }) {
     { id: "ussd",     icon: "💳", name: "USSD / Card",   fields: [{ k: "GTB USSD", v: "*737*2*Amount*0812345678#" }, { k: "Zenith", v: "*966*2*Amount*0812345678#" }] },
   ];
 
-  if (!order) return (   <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center" }}>     <div className="spinner" />   </div> );
+  if (!order) return (
+    <div style={{ minHeight: "100dvh", background: "var(--cream)", padding: "24px 20px" }}>
+      <div className="skeleton" style={{ height: 48, width: "50%", borderRadius: 10, marginBottom: 24 }} />
+      <div className="skeleton" style={{ height: 140, borderRadius: 16, marginBottom: 16 }} />
+      <div className="skeleton" style={{ height: 200, borderRadius: 16 }} />
+    </div>
+  );
 
   return (
     <div className="page" style={{ background: "var(--cream)" }}>
@@ -927,7 +1109,10 @@ function PaymentPage({ nav, orderId, toast }) {
 
 function OrderStatusPage({ nav, orderId, toast }) {
   const order = useOrder(orderId);
+  const liveMenu = useMenuItems();
+  const eta = useQueueETA(order, liveMenu);
   const [tab, setTab] = useState("status");
+  const [submittingRating, setSubmittingRating] = useState(false);
   const prevStatus = useRef(null);
 
   useEffect(() => {
@@ -942,6 +1127,7 @@ function OrderStatusPage({ nav, orderId, toast }) {
       if (msg) {
         sendPushNotification(msg.title, msg.body);
         toast(msg.title, "🍜");
+        haptic(order.order_status === "ready" ? [40, 60, 40, 60, 40] : 30);
         if (["preparing", "ready"].includes(order.order_status)) {
           try { ringAlarm(); } catch(e) {}
         }
@@ -950,13 +1136,52 @@ function OrderStatusPage({ nav, orderId, toast }) {
     prevStatus.current = order.order_status;
   }, [order?.order_status, toast]);
 
-  if (!order) return (   <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center" }}>     <div className="spinner" />   </div> );
+  const submitRating = async (stars) => {
+    if (submittingRating || order?.rating) return;
+    setSubmittingRating(true);
+    haptic(20);
+    try {
+      await updateDoc(doc(db, "orders", orderId), { rating: stars });
+      toast("Thanks for rating your order! ⭐", "🍜");
+    } catch {
+      toast("Could not save your rating. Try again.", "❌");
+    }
+    setSubmittingRating(false);
+  };
+
+  if (!order) return (
+    <div style={{ minHeight: "100dvh", background: "var(--cream)", padding: "24px 20px" }}>
+      <div className="skeleton" style={{ height: 48, width: "60%", borderRadius: 10, marginBottom: 24 }} />
+      <div className="skeleton" style={{ height: 180, borderRadius: 16, marginBottom: 16 }} />
+      <div className="skeleton" style={{ height: 220, borderRadius: 16 }} />
+    </div>
+  );
 
   if (order.order_status === "completed") return (
   <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
     <div style={{ fontSize: 80, marginBottom: 16 }}>✅</div>
     <h2 style={{ fontFamily: "var(--font-h)", fontSize: 28, fontWeight: 800, color: "var(--ink)", marginBottom: 8 }}>Order Complete!</h2>
-    <p style={{ color: "var(--muted)", fontSize: 15, marginBottom: 32 }}>Thanks for ordering from Joy's Kitchen 🍜</p>
+    <p style={{ color: "var(--muted)", fontSize: 15, marginBottom: 24 }}>Thanks for ordering from Joy's Kitchen 🍜</p>
+
+    {order.rating ? (
+      <div style={{ marginBottom: 28, fontSize: 15, color: "var(--muted)" }}>
+        You rated this order {"⭐".repeat(order.rating)}
+      </div>
+    ) : (
+      <div style={{ marginBottom: 28 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)", marginBottom: 10 }}>How was your order?</p>
+        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} onClick={() => submitRating(n)} disabled={submittingRating}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 34, padding: 2, lineHeight: 1, transition: "transform 0.1s" }}
+              onTouchStart={(e) => { e.currentTarget.style.transform = "scale(1.2)"; }}
+              onTouchEnd={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+            >⭐</button>
+          ))}
+        </div>
+      </div>
+    )}
+
     <button className="btn btn-fire" onClick={() => nav("menu")} style={{ padding: "14px 32px", fontSize: 15 }}>Order Again →</button>
   </div>
 );
@@ -1000,6 +1225,23 @@ const steps = [
           <div style={{ marginTop: 8, fontFamily: "var(--font-h)", fontSize: 26, fontWeight: 800, color: "var(--fire)" }}>
             {fmt(order.total_price)}
           </div>
+          {order.pickup_time && order.order_status === "paid" ? (
+            <div style={{
+              marginTop: 14, display: "inline-flex", alignItems: "center", gap: 6,
+              background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)",
+              borderRadius: 20, padding: "7px 16px", fontSize: 13, fontWeight: 700, color: "#7c3aed",
+            }}>
+              📅 Scheduled for {fmtTime(order.pickup_time)}
+            </div>
+          ) : eta != null && ["paid", "preparing"].includes(order.order_status) && (
+            <div style={{
+              marginTop: 14, display: "inline-flex", alignItems: "center", gap: 6,
+              background: "rgba(232,69,10,0.08)", border: "1px solid rgba(232,69,10,0.2)",
+              borderRadius: 20, padding: "7px 16px", fontSize: 13, fontWeight: 700, color: "var(--fire)",
+            }}>
+              ⏰ Ready in ~{eta} min
+            </div>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 6, marginBottom: 16, background: "var(--warm)", borderRadius: 12, padding: 4 }}>
@@ -1268,6 +1510,11 @@ function VendorQueuePage({ nav, toast }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
                     <span style={{ fontFamily: "var(--font-h)", fontSize: 18, fontWeight: 800 }}>{order.customer_name}</span>
                     <StatusBadge status={order.order_status} />
+                    {order.pickup_time && (
+                      <span className="badge" style={{ background: "#ede9fe", color: "#7c3aed", fontSize: 11 }}>
+                        📅 {fmtTime(order.pickup_time)}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 14px" }}>
                     {[
@@ -1340,7 +1587,12 @@ function VendorDashboardPage({ nav }) {
             <p style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Active Queue</p>
             <button onClick={() => nav("vendor_queue")} className="btn btn-out btn-sm">View All</button>
           </div>
-          {queue.length === 0 && <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 13, padding: "16px 0" }}>No active orders</p>}
+          {queue.length === 0 && (
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <div style={{ fontSize: 32, marginBottom: 6 }}>🍜</div>
+              <p style={{ color: "var(--muted)", fontSize: 13, fontWeight: 600 }}>Queue is clear — nothing cooking right now!</p>
+            </div>
+          )}
           {queue.slice(0, 3).map((o, i) => (
             <div key={o.id} onClick={() => nav("vendor_order", { orderId: o.id })} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < 2 ? "1px solid var(--border)" : "none", cursor: "pointer" }}>
               <span style={{ fontFamily: "var(--font-h)", fontSize: 22, fontWeight: 800, color: "var(--fire)", minWidth: 30 }}>#{i + 1}</span>
@@ -1365,7 +1617,12 @@ function VendorOrderPage({ nav, orderId, toast }) {
   const [updating, setUpdating] = useState(false);
   const [tab, setTab] = useState("details");
 
-  if (!order) return (   <div style={{ minHeight: "100dvh", background: "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center" }}>     <div className="spinner" />   </div> );
+  if (!order) return (
+    <div style={{ minHeight: "100dvh", background: "var(--cream)", padding: "24px 20px" }}>
+      <div className="skeleton" style={{ height: 40, width: "40%", borderRadius: 10, marginBottom: 20 }} />
+      <div className="skeleton" style={{ height: 260, borderRadius: 16 }} />
+    </div>
+  );
 
   const changeStatus = async (status) => {
     setUpdating(true);
@@ -1426,6 +1683,7 @@ function VendorOrderPage({ nav, orderId, toast }) {
           <div className="card" style={{ padding: 20 }}>
             <div className="row"><span className="lbl">Customer</span><span className="val">{order.customer_name}</span></div>
             {order.customer_phone && <div className="row"><span className="lbl">Phone</span><span className="val">{order.customer_phone}</span></div>}
+            {order.pickup_time && <div className="row"><span className="lbl">Pickup</span><span className="val">📅 {fmtTime(order.pickup_time)}</span></div>}
             <div className="row"><span className="lbl">Noodle</span><span className="val">{order.noodle_name}</span></div>
             <div className="row"><span className="lbl">Qty</span><span className="val">× {order.quantity}</span></div>
             {order.spice_level && <div className="row"><span className="lbl">Spice</span><span className="val">{SPICES.find((s) => s.id === order.spice_level)?.emoji} {SPICES.find((s) => s.id === order.spice_level)?.label}</span></div>}
@@ -1655,7 +1913,13 @@ function VendorSalesPage({ nav }) {
               </span>
             </div>
           ))}
-          {allOrders.length === 0 && <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 13, padding: "20px 0" }}>No orders yet</p>}
+          {allOrders.length === 0 && (
+            <div style={{ textAlign: "center", padding: "40px 0" }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>📊</div>
+              <p style={{ color: "var(--muted)", fontSize: 14, fontWeight: 600 }}>No sales yet</p>
+              <p style={{ color: "var(--muted)", fontSize: 12, marginTop: 2 }}>Your first order will show up here automatically.</p>
+            </div>
+          )}
         </div>
       </div>
       <VendorNav current="vendor_sales" nav={nav} logout={() => { signOut(auth); sessionStorage.removeItem("vendor_auth"); nav("home"); }} />
@@ -1664,6 +1928,75 @@ function VendorSalesPage({ nav }) {
 }
 
 // ─── CUSTOMER BOTTOM NAV ──────────────────────────────────────────────────────
+function OrderHistoryPage({ nav, toast }) {
+  const user = auth.currentUser;
+  const { orders, loading } = useMyOrders(user?.uid);
+
+  const reorder = async (o) => {
+    haptic(15);
+    try {
+      const ref = await placeOrder({
+        customer_name: o.customer_name, customer_email: o.customer_email || "",
+        customer_uid: user?.uid || "", customer_phone: o.customer_phone || "",
+        noodle_type: o.noodle_type, noodle_name: o.noodle_name,
+        quantity: o.quantity, spice_level: o.spice_level, egg_option: o.egg_option,
+        add_ons: o.add_ons || [], unit_price: o.unit_price, total_price: o.total_price, note: "",
+      });
+      localStorage.setItem("last_order_id", ref.id);
+      nav("payment", { orderId: ref.id });
+    } catch {
+      toast?.("Couldn't reorder right now. Try again.", "❌");
+    }
+  };
+
+  return (
+    <div className="page" style={{ background: "var(--cream)" }}>
+      <div className="topbar">
+        <div className="topbar-inner">
+          <div>
+            <h1 style={{ fontFamily: "var(--font-h)", color: "#fff", fontSize: 21 }}>🧾 Order History</h1>
+            <div className="sub">Everything you've ordered from us</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="wrap" style={{ paddingTop: 20, paddingBottom: 40 }}>
+        {loading ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {[0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 96, borderRadius: 16 }} />)}
+          </div>
+        ) : orders.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "60px 20px" }}>
+            <div style={{ fontSize: 56, marginBottom: 12 }}>🍜</div>
+            <h2 style={{ fontFamily: "var(--font-h)", fontSize: 20, color: "var(--muted)", fontWeight: 700 }}>No orders yet!</h2>
+            <p style={{ color: "var(--muted)", fontSize: 14, marginTop: 6, marginBottom: 20 }}>Your first bowl of noodles is one tap away.</p>
+            <button className="btn btn-fire" onClick={() => nav("menu")} style={{ padding: "12px 28px" }}>Browse Menu →</button>
+          </div>
+        ) : (
+          orders.map((o, i) => (
+            <div key={o.id} className="card fade-up" style={{ padding: 16, marginBottom: 12, animationDelay: `${i * 0.05}s` }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontFamily: "var(--font-h)", fontWeight: 700, fontSize: 15 }}>{o.quantity}× {o.noodle_name}</span>
+                <StatusBadge status={o.order_status} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
+                <span>{fmtTime(o.created_at)}{o.rating ? ` · ${"⭐".repeat(o.rating)}` : ""}</span>
+                <span style={{ fontFamily: "var(--font-h)", fontWeight: 800, color: "var(--fire)", fontSize: 15 }}>{fmt(o.total_price)}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => nav("order", { orderId: o.id })}>View →</button>
+                {o.order_status === "completed" && (
+                  <button className="btn btn-fire btn-sm" style={{ flex: 1 }} onClick={() => reorder(o)}>🔁 Reorder</button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CustomerBottomNav({ page, nav, savedOrderId }) {
   return (
     <nav className="bottom-nav">
@@ -1671,6 +2004,7 @@ function CustomerBottomNav({ page, nav, savedOrderId }) {
         { id: "home", icon: "🏠", label: "Home" },
         { id: "menu", icon: "🍜", label: "Menu" },
         ...(savedOrderId ? [{ id: "order", icon: "📦", label: "My Order", orderId: savedOrderId }] : []),
+        { id: "order_history", icon: "🧾", label: "History" },
       ].map((item) => (
         <button key={item.id} onClick={() => nav(item.id, item.orderId ? { orderId: item.orderId } : {})}
           className={page === item.id ? "active" : ""}>
@@ -1710,6 +2044,7 @@ export default function App() {
       {page === "customize"        && <CustomizePage {...pageProps} />}
       {page === "payment"          && <PaymentPage {...pageProps} />}
       {page === "order" && <><OrderStatusPage {...pageProps} /><CustomerBottomNav page={page} nav={nav} savedOrderId={savedOrderId} /></>}
+      {page === "order_history" && <><OrderHistoryPage {...pageProps} /><CustomerBottomNav page={page} nav={nav} savedOrderId={savedOrderId} /></>}
 
       {page === "vendor_queue"     && <VendorQueuePage {...pageProps} />}
       {page === "vendor_dashboard" && <VendorDashboardPage {...pageProps} />}
